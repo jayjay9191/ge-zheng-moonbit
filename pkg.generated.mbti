@@ -9,6 +9,8 @@ import {
 // Values
 pub fn compare(Chip, Chip, Double, screen_qa? : Bool, min_coverage? : Double) -> Audit raise AuditError
 
+pub fn inspect_pixel(Chip, Chip, Audit, Int32, Int32) -> PixelEvidence raise AuditError
+
 // Errors
 #derive(@debug.Debug)
 pub suberror AuditError {
@@ -72,6 +74,24 @@ pub(all) struct Chip {
   nir : Array[Int32]
   qa : Array[Int32]
   saturation : Array[Int32]
+}
+
+#derive(@json.ToJson)
+pub(all) struct PixelEvidence {
+  x_center : Int32
+  y_center : Int32
+  red_before : Int32
+  nir_before : Int32
+  red_after : Int32
+  nir_after : Int32
+  qa_before : Int32
+  qa_after : Int32
+  saturation_before : Int32
+  saturation_after : Int32
+  reason_before : Int32
+  reason_after : Int32
+  class_code : Int32
+  delta : Double?
 }
 
 #derive(@json.ToJson)

@@ -61,3 +61,7 @@ moon build --release --target js
 ### 共同有效覆盖门槛
 
 CLI 可用 `--min-coverage 0.70` 设门槛。肥东样例的共同有效覆盖为 68.71%，设 0.70 时会停止输出面积。门槛由用户按任务设定，默认只要求有共同有效像元。
+
+### 追溯一个像元
+
+运行 `node gezheng.js data/feidong/scene-1.json data/feidong/scene-2.json 0.15 --inspect 10 14`。按共同网格的 1 起算行列输出投影坐标、两期 B4/B5、QA 位值、每期去留原因和差值。已排除的差值为 JSON null。

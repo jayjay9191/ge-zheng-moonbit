@@ -297,3 +297,57 @@ pub fn compare(
     ndvi_after,
   }
 }
+
+///|
+#derive(ToJson)
+pub(all) struct PixelEvidence {
+  x_center : Int32
+  y_center : Int32
+  red_before : Int32
+  nir_before : Int32
+  red_after : Int32
+  nir_after : Int32
+  qa_before : Int32
+  qa_after : Int32
+  saturation_before : Int32
+  saturation_after : Int32
+  reason_before : Int32
+  reason_after : Int32
+  class_code : Int32
+  delta : Double?
+}
+
+///|
+/// row and column are one-based indexes within the common window.
+pub fn inspect_pixel(
+  a : Chip,
+  b : Chip,
+  result : Audit,
+  row : Int32,
+  column : Int32,
+) -> PixelEvidence raise AuditError {
+  if row < 1 || row > result.height || column < 1 || column > result.width {
+    raise Invalid("pixel is outside the common grid")
+  }
+  let x = result.x + (column - 1) * result.cell
+  let y = result.y - (row - 1) * result.cell
+  let ia = (a.y - y) / a.cell * a.width + (x - a.x) / a.cell
+  let ib = (b.y - y) / b.cell * b.width + (x - b.x) / b.cell
+  let i = (row - 1) * result.width + column - 1
+  {
+    x_center: x + result.cell / 2,
+    y_center: y - result.cell / 2,
+    red_before: a.red[ia],
+    nir_before: a.nir[ia],
+    red_after: b.red[ib],
+    nir_after: b.nir[ib],
+    qa_before: a.qa[ia],
+    qa_after: b.qa[ib],
+    saturation_before: a.saturation[ia],
+    saturation_after: b.saturation[ib],
+    reason_before: result.before_reason[i],
+    reason_after: result.after_reason[i],
+    class_code: result.classes[i],
+    delta: result.delta[i],
+  }
+}

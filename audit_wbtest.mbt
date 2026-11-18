@@ -93,3 +93,20 @@ test "coverage threshold is inclusive and blocks unsupported area conclusions" {
   let denied = Ok(compare(a, a, 0.15, min_coverage=0.6)) catch { e => Err(e) }
   assert_true(denied is Err(Invalid(message)) && message.contains("1/2"))
 }
+
+///|
+test "pixel evidence traces both source values across an integer offset" {
+  let a = test_chip(300000, 3500000, [10000, 12000, 14000], [0, 0, 0])
+  let b = test_chip(300030, 3500000, [13000, 14000, 16000], [8, 0, 0])
+  let result = compare(a, b, 0.15)
+  let evidence = inspect_pixel(a, b, result, 1, 1)
+  assert_eq(evidence.x_center, 300045)
+  assert_eq(evidence.red_before, 12000)
+  assert_eq(evidence.red_after, 13000)
+  assert_eq(evidence.qa_after, 8)
+  assert_eq(evidence.reason_after, 2)
+  assert_true(evidence.delta is None)
+  assert_true(
+    (Ok(inspect_pixel(a, b, result, 1, 3)) catch { e => Err(e) }) is Err(_),
+  )
+}
