@@ -44,6 +44,10 @@ node gezheng.js data/scene-1.json data/scene-2.json 0.15
 
 打开 **格证-肥东对照报告.html** 并点“定位一处被筛除的像元”，查看第 10 行、第 14 列。该像元直接算为 +0.7849，第一期 QA 标云后排除。用 python scripts/replay_land.py 和 python scripts/render_land.py 离线复跑。原始产品链接、窗口及哈希见 **data/feidong/sources.json**。
 
+## 从新检出复跑
+
+安装 MoonBit CLI、Node.js 22.3+ 和 Python 3.10+。在仓库根目录运行 `python scripts/verify_local.py`。入口自动跑 MoonBit 测试、从源码构建 JS、核对肥东覆盖门槛和像元证据，再复算两地案例并重建两个离线报告。验收不需要联网或安装第三方 Python 包。已有 `gezheng.js` 的验收包可以直接用试跑.cmd。
+
 ## 实现与验证
 
 MoonBit 执行网格校验、求交、QA 位运算、反射率换算、NDVI、分类和面积统计。Node.js 负责命令行输入输出。Python 下载裁片、用分数独立验算并渲染报告。可用 MoonBit 编译器重新构建：
