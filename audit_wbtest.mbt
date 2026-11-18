@@ -110,3 +110,18 @@ test "pixel evidence traces both source values across an integer offset" {
     (Ok(inspect_pixel(a, b, result, 1, 3)) catch { e => Err(e) }) is Err(_),
   )
 }
+
+///|
+test "summary avoids retaining grids without changing the coverage or totals" {
+  let a = test_chip(300000, 3500000, [10000, 10000], [0, 8])
+  let full = compare(a, a, 0.15)
+  let light = compare(a, a, 0.15, pixel_grids=false)
+  assert_eq(light.valid, full.valid)
+  assert_eq(light.stable, full.stable)
+  assert_eq(light.first_qa.cloud, full.first_qa.cloud)
+  assert_true(
+    light.delta.is_empty() &&
+    light.classes.is_empty() &&
+    light.before_reason.is_empty(),
+  )
+}

@@ -152,6 +152,7 @@ pub fn compare(
   threshold : Double,
   screen_qa~ : Bool = true,
   min_coverage~ : Double = 0.0,
+  pixel_grids~ : Bool = true,
 ) -> Audit raise AuditError {
   validate(a)
   validate(b)
@@ -203,22 +204,34 @@ pub fn compare(
       let ib = (row - dy) * b.width + col - dx
       let (reason_a, before) = pixel(a, ia, screen_qa)
       let (reason_b, after) = pixel(b, ib, screen_qa)
-      ndvi_before.push(if reason_a == 0 { Some(before) } else { None })
-      ndvi_after.push(if reason_b == 0 { Some(after) } else { None })
-      before_reason.push(reason_a)
-      after_reason.push(reason_b)
+      if pixel_grids {
+        ndvi_before.push(if reason_a == 0 { Some(before) } else { None })
+        ndvi_after.push(if reason_b == 0 { Some(after) } else { None })
+        before_reason.push(reason_a)
+        after_reason.push(reason_b)
+      }
       qa_a[reason_a] += 1
       qa_b[reason_b] += 1
       if reason_a != 0 || reason_b != 0 {
-        water_code.push(-1)
-        classes.push(-2)
-        delta.push(None)
+        if pixel_grids {
+          water_code.push(-1)
+        }
+        if pixel_grids {
+          classes.push(-2)
+        }
+        if pixel_grids {
+          delta.push(None)
+        }
       } else {
         let water = ((a.qa[ia] & 128) >> 7) + ((b.qa[ib] & 128) >> 6)
-        water_code.push(water)
+        if pixel_grids {
+          water_code.push(water)
+        }
         water_counts[water] += 1
         let d = after - before
-        delta.push(Some(d))
+        if pixel_grids {
+          delta.push(Some(d))
+        }
         sum += d
         let magnitude = if d < 0.0 { -d } else { d }
         if magnitude > max_abs_delta {
@@ -229,16 +242,22 @@ pub fn compare(
           if water == 0 {
             both_nonwater_gain += 1
           }
-          classes.push(1)
+          if pixel_grids {
+            classes.push(1)
+          }
         } else if d <= -threshold {
           loss += 1
           if water == 0 {
             both_nonwater_loss += 1
           }
-          classes.push(-1)
+          if pixel_grids {
+            classes.push(-1)
+          }
         } else {
           stable += 1
-          classes.push(0)
+          if pixel_grids {
+            classes.push(0)
+          }
         }
       }
     }
@@ -326,6 +345,9 @@ pub fn inspect_pixel(
   row : Int32,
   column : Int32,
 ) -> PixelEvidence raise AuditError {
+  if result.classes.is_empty() {
+    raise Invalid("pixel evidence requires a result with pixel grids")
+  }
   if row < 1 || row > result.height || column < 1 || column > result.width {
     raise Invalid("pixel is outside the common grid")
   }
