@@ -1,6 +1,7 @@
 """Build from MoonBit source and exercise both offline cases and the CLI."""
 import json
 from pathlib import Path
+import tempfile
 import shutil
 import subprocess
 import sys
@@ -30,6 +31,13 @@ def check_features():
     assert value["qa_before"] & 8 and value["reason_before"] == 2 and value["delta"] is None
     denied = cli("--min-coverage", "0.70")
     assert denied.returncode == 2 and "11257/16384" in denied.stdout, denied.stdout
+    source = (ROOT / PAIR[0]).read_text(encoding="utf-8")
+    with tempfile.TemporaryDirectory(dir=ROOT / "_build") as scratch:
+        duplicated = Path(scratch) / "duplicate-key.json"
+        duplicated.write_text('{"width":1,' + source.lstrip()[1:], encoding="utf-8")
+        bad = subprocess.run(["node", str(RESULT), str(duplicated), PAIR[1], PAIR[2]],
+                             cwd=ROOT, capture_output=True, text=True, encoding="utf-8")
+        assert bad.returncode == 2 and "INPUT ERROR" in bad.stdout, bad.stdout
 
 
 def main():

@@ -21,6 +21,10 @@
 
 ## 开始
 
+[下载离线验收包](https://github.com/jayjay9191/ge-zheng-moonbit/releases/download/v0.1.0/gridproof-offline.zip)并解压，可以直接打开两份 HTML。包内附预编译的 `gezheng.js`、真实样例和复跑脚本。GitHub 源码检出可用 `python scripts/verify_local.py` 重新生成同一组产物。
+
+[GitHub Actions 自动验收](https://github.com/jayjay9191/ge-zheng-moonbit/actions/workflows/verify.yml)
+
 1. 双击 **格证-实测报告.html** 查看两期 NDVI、变化分类、三组验证和像元查询。可切换 0.10、0.15、0.20 三档阈值，也可以只看两期 QA 均未标水的区域。报告可以离线打开。
 2. 双击 **试跑.cmd** 重跑全部用例。需要 Node.js 22.3+ 与 Python 3.10+。样例已随包提供，复跑无须下载数据或安装第三方 Python 包。
 3. 比较自备的同规格裁片，用编译产物执行：

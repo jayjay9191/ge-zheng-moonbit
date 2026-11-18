@@ -125,3 +125,58 @@ test "summary avoids retaining grids without changing the coverage or totals" {
     light.before_reason.is_empty(),
   )
 }
+
+///|
+test "invalid band sizes and unsigned samples fail before comparison" {
+  let base = test_chip(300000, 3500000, [11000, 14000], [0, 0])
+  for
+    bad in [
+      { ..base, nir: [18000], },
+      { ..base, qa: [0, -1], },
+      { ..base, saturation: [0, 65536], },
+    ] {
+    let result = Ok(compare(base, bad, 0.15)) catch { e => Err(e) }
+    assert_true(result is Err(Invalid(reason)) && reason.contains("UInt16"))
+  }
+}
+
+///|
+test "disjoint inputs and zero joint valid coverage are rejected" {
+  let base = test_chip(300000, 3500000, [11000, 14000], [0, 0])
+  let outside = { ..base, x: base.x + 60, }
+  let cloudy = { ..base, qa: [8, 8], }
+  let disjoint = Ok(compare(base, outside, 0.15)) catch { e => Err(e) }
+  let no_valid = Ok(compare(base, cloudy, 0.15)) catch { e => Err(e) }
+  assert_true(
+    disjoint is Err(Invalid(reason)) && reason.contains("do not overlap"),
+  )
+  assert_true(
+    no_valid is Err(Invalid(reason)) && reason.contains("no pixels are valid"),
+  )
+}
+
+///|
+test "water flags preserve four transitions and excluded pixels stay unknown" {
+  let a = test_chip(300000, 3500000, [14000, 14000, 10000, 10000, 14000], [
+    0, 128, 0, 128, 8,
+  ])
+  let b = {
+    ..a,
+    red: [10000, 14000, 14000, 10000, 10000],
+    qa: [0, 0, 128, 128, 0],
+  }
+  let audit = compare(a, b, 0.15)
+  assert_eq(audit.water_code, [0, 1, 2, 3, -1])
+  assert_eq(audit.classes, [1, 0, -1, 0, -2])
+  assert_eq(
+    [
+      audit.both_nonwater_valid,
+      audit.before_only_water,
+      audit.after_only_water,
+      audit.both_water,
+    ],
+    [1, 1, 1, 1],
+  )
+  assert_eq([audit.gain_m2, audit.loss_m2], [900L, 900L])
+  assert_eq([audit.both_nonwater_gain, audit.both_nonwater_loss], [1, 0])
+}

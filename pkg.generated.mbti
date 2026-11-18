@@ -11,6 +11,8 @@ pub fn compare(Chip, Chip, Double, screen_qa? : Bool, min_coverage? : Double, pi
 
 pub fn inspect_pixel(Chip, Chip, Audit, Int32, Int32) -> PixelEvidence raise AuditError
 
+pub fn parse_chip(String) -> Chip raise
+
 // Errors
 #derive(@debug.Debug)
 pub suberror AuditError {

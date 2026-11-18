@@ -11,7 +11,7 @@ fn load_chip(path : String) -> @audit.Chip raise {
   if raw == "" {
     fail("cannot read input file: " + path)
   }
-  @json.from_json(@json.parse(raw, reject_duplicate_keys=true))
+  @audit.parse_chip(raw)
 }
 
 ///|

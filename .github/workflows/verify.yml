@@ -1,0 +1,35 @@
+name: Verify Landsat replay
+
+on: [push, pull_request, workflow_dispatch]
+
+permissions:
+  contents: read
+
+jobs:
+  replay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install MoonBit
+        run: |
+          curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
+          echo "$HOME/.moon/bin" >> "$GITHUB_PATH"
+      - name: Verify clean build and both real Landsat cases
+        run: python scripts/verify_local.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gridproof-reports
+          if-no-files-found: error
+          path: |
+            gezheng.js
+            格证-实测报告.html
+            格证-肥东对照报告.html
+            results/summary.json
+            results/feidong/summary.json

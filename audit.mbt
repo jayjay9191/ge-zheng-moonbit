@@ -16,6 +16,12 @@ pub(all) struct Chip {
 }
 
 ///|
+/// Decode one chip and reject ambiguous JSON objects with duplicate band keys.
+pub fn parse_chip(raw : String) -> Chip raise {
+  @json.from_json(@json.parse(raw, reject_duplicate_keys=true))
+}
+
+///|
 #derive(ToJson)
 pub(all) struct Quality {
   fill : Int32
