@@ -85,3 +85,11 @@ test "QA findings identify which date caused each exclusion" {
   assert_eq(result.after_reason, [0, 0, 3])
   assert_eq(result.classes, [0, -2, -2])
 }
+
+///|
+test "coverage threshold is inclusive and blocks unsupported area conclusions" {
+  let a = test_chip(300000, 3500000, [10000, 10000], [0, 8])
+  assert_eq(compare(a, a, 0.15, min_coverage=0.5).valid, 1)
+  let denied = Ok(compare(a, a, 0.15, min_coverage=0.6)) catch { e => Err(e) }
+  assert_true(denied is Err(Invalid(message)) && message.contains("1/2"))
+}

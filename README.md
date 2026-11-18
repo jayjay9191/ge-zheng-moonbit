@@ -57,3 +57,7 @@ moon build --release --target js
 
 参考 [USGS Landsat QA 波段](https://www.usgs.gov/landsat-missions/landsat-collection-2-quality-assessment-bands)、[USGS 反射率换算](https://www.usgs.gov/faqs/how-do-i-use-a-scale-factor-landsat-level-2-science-products)、[Planetary Computer 的 Landsat 数据集](https://planetarycomputer.microsoft.com/dataset/landsat-c2-l2)。
 
+
+### 共同有效覆盖门槛
+
+CLI 可用 `--min-coverage 0.70` 设门槛。肥东样例的共同有效覆盖为 68.71%，设 0.70 时会停止输出面积。门槛由用户按任务设定，默认只要求有共同有效像元。

@@ -7,7 +7,7 @@ import {
 }
 
 // Values
-pub fn compare(Chip, Chip, Double, screen_qa? : Bool) -> Audit raise AuditError
+pub fn compare(Chip, Chip, Double, screen_qa? : Bool, min_coverage? : Double) -> Audit raise AuditError
 
 // Errors
 #derive(@debug.Debug)

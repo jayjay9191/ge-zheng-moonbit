@@ -151,11 +151,15 @@ pub fn compare(
   b : Chip,
   threshold : Double,
   screen_qa~ : Bool = true,
+  min_coverage~ : Double = 0.0,
 ) -> Audit raise AuditError {
   validate(a)
   validate(b)
   if !(threshold > 0.0 && threshold <= 2.0) {
     raise Invalid("NDVI threshold must be between 0 (exclusive) and 2")
+  }
+  if !(min_coverage >= 0.0 && min_coverage <= 1.0) {
+    raise Invalid("minimum coverage must be in [0, 1]")
   }
   if a.epsg != b.epsg {
     raise Invalid("CRS mismatch; refusing to compare")
@@ -246,6 +250,12 @@ pub fn compare(
   if valid == 0 {
     raise Invalid("no pixels are valid in both dates")
   }
+  let coverage = valid.to_double() / overlap.to_double()
+  if coverage < min_coverage {
+    raise Invalid(
+      "shared valid coverage \{valid}/\{overlap} is below minimum fraction \{min_coverage}",
+    )
+  }
   {
     qa_screened: screen_qa,
     first_scene: a.scene,
@@ -261,7 +271,7 @@ pub fn compare(
     overlap,
     valid,
     excluded: overlap - valid,
-    valid_fraction: valid.to_double() / overlap.to_double(),
+    valid_fraction: coverage,
     threshold,
     gain,
     loss,

@@ -18,11 +18,9 @@ fn load_chip(path : String) -> @audit.Chip raise {
 fn main {
   let args = @env.args()
   let start = if args.length() > 2 && args[2] == "--" { 3 } else { 2 }
-  let count = args.length() - start
-  let direct = count == 4 && args[start + 3] == "--direct"
-  if count != 3 && !direct {
+  if args.length() < start + 3 {
     println(
-      "Usage: moon run cmd/main -- <before.json> <after.json> <NDVI threshold> [--direct]",
+      "Usage: moon run cmd/main -- <before.json> <after.json> <NDVI threshold> [--direct] [--min-coverage <fraction>]",
     )
     @env.exit(2)
   }
@@ -30,7 +28,30 @@ fn main {
     let before = load_chip(args[start])
     let after = load_chip(args[start + 1])
     let threshold : Double = @json.from_json(@json.parse(args[start + 2]))
-    let result = @audit.compare(before, after, threshold, screen_qa=!direct)
+    let mut direct = false
+    let mut minimum = 0.0
+    let mut index = start + 3
+    while index < args.length() {
+      match args[index] {
+        "--direct" => direct = true
+        "--min-coverage" => {
+          index += 1
+          if index >= args.length() {
+            fail("--min-coverage requires a fraction")
+          }
+          minimum = @json.from_json(@json.parse(args[index]))
+        }
+        unknown => fail("unknown argument: " + unknown)
+      }
+      index += 1
+    }
+    let result = @audit.compare(
+      before,
+      after,
+      threshold,
+      screen_qa=!direct,
+      min_coverage=minimum,
+    )
     let json = @json.ToJson::to_json(result)
     if json is Object(fields) {
       fields["delta"] = nullable_grid(result.delta)
