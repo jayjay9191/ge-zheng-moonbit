@@ -1,5 +1,5 @@
 // Generated using `moon info`, DON'T EDIT IT
-package "ge-zheng/landsat"
+package "jayjay9191/ge-zheng-moonbit"
 
 import {
   "moonbitlang/core/debug",

@@ -1,4 +1,4 @@
-name = "ge-zheng/landsat"
+name = "jayjay9191/ge-zheng-moonbit"
 
 version = "0.1.0"
 

@@ -1,5 +1,5 @@
 import {
-  "ge-zheng/landsat" @audit,
+  "jayjay9191/ge-zheng-moonbit" @audit,
   "moonbitlang/core/env",
   "moonbitlang/core/json",
 }
