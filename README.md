@@ -69,3 +69,7 @@ CLI 可用 `--min-coverage 0.70` 设门槛。肥东样例的共同有效覆盖�
 ### 导入 GIS 软件
 
 使用已安装 requirements-fetch.txt 的 Python，运行 `python scripts/export_geotiff.py results/feidong/screened.json results/feidong/gis`。两张 GeoTIFF 保留共同网格坐标，排除像元写 NoData。分类为 -1 下降、0 阈值内、1 上升，另一张保存实际 NDVI 差值。GeoTIFF 仅封装 MoonBit 输出。
+
+### 分析本地 Landsat 裁片
+
+使用 `python scripts/pack_local_tiffs.py --help` 查看如何把本地 SR_B4、SR_B5、QA_PIXEL、QA_RADSAT 变成输入 JSON。应来自同一 Landsat 8/9 Collection 2 Level-2 场景，使用原始 UInt16 值。脚本检查四个 TIFF 的 CRS、分辨率、原点、方向和尺寸，拒绝不一致的波段，保留原始像元。
