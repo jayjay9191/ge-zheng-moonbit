@@ -1,0 +1,96 @@
+[
+  {
+    "file": "data/scene-1.json",
+    "stac": "https://planetarycomputer.microsoft.com/api/stac/v1/collections/landsat-c2-l2/items/LC09_L2SP_121038_20240418_02_T1",
+    "sha256": "aaa7485b71a8e9a01d696c2746769f9b7a093bf21d5157e71f7f68d1a9503bd6",
+    "assets": {
+      "red": {
+        "url": "https://landsateuwest.blob.core.windows.net/landsat-c2/level-2/standard/oli-tirs/2024/121/038/LC09_L2SP_121038_20240418_20240419_02_T1/LC09_L2SP_121038_20240418_20240419_02_T1_SR_B4.TIF",
+        "window": [
+          4328,
+          4281,
+          128,
+          128
+        ]
+      },
+      "nir": {
+        "url": "https://landsateuwest.blob.core.windows.net/landsat-c2/level-2/standard/oli-tirs/2024/121/038/LC09_L2SP_121038_20240418_20240419_02_T1/LC09_L2SP_121038_20240418_20240419_02_T1_SR_B5.TIF",
+        "window": [
+          4328,
+          4281,
+          128,
+          128
+        ]
+      },
+      "qa": {
+        "url": "https://landsateuwest.blob.core.windows.net/landsat-c2/level-2/standard/oli-tirs/2024/121/038/LC09_L2SP_121038_20240418_20240419_02_T1/LC09_L2SP_121038_20240418_20240419_02_T1_QA_PIXEL.TIF",
+        "window": [
+          4328,
+          4281,
+          128,
+          128
+        ]
+      },
+      "saturation": {
+        "url": "https://landsateuwest.blob.core.windows.net/landsat-c2/level-2/standard/oli-tirs/2024/121/038/LC09_L2SP_121038_20240418_20240419_02_T1/LC09_L2SP_121038_20240418_20240419_02_T1_QA_RADSAT.TIF",
+        "window": [
+          4328,
+          4281,
+          128,
+          128
+        ]
+      }
+    },
+    "center_lonlat": [
+      117.435,
+      31.615
+    ]
+  },
+  {
+    "file": "data/scene-2.json",
+    "stac": "https://planetarycomputer.microsoft.com/api/stac/v1/collections/landsat-c2-l2/items/LC09_L2SP_121038_20241011_02_T1",
+    "sha256": "479f850c497f1e8140f05fd856f8ec4d89d1e004cf4d1016ab7361f043321cb7",
+    "assets": {
+      "red": {
+        "url": "https://landsateuwest.blob.core.windows.net/landsat-c2/level-2/standard/oli-tirs/2024/121/038/LC09_L2SP_121038_20241011_20241012_02_T1/LC09_L2SP_121038_20241011_20241012_02_T1_SR_B4.TIF",
+        "window": [
+          4218,
+          4281,
+          128,
+          128
+        ]
+      },
+      "nir": {
+        "url": "https://landsateuwest.blob.core.windows.net/landsat-c2/level-2/standard/oli-tirs/2024/121/038/LC09_L2SP_121038_20241011_20241012_02_T1/LC09_L2SP_121038_20241011_20241012_02_T1_SR_B5.TIF",
+        "window": [
+          4218,
+          4281,
+          128,
+          128
+        ]
+      },
+      "qa": {
+        "url": "https://landsateuwest.blob.core.windows.net/landsat-c2/level-2/standard/oli-tirs/2024/121/038/LC09_L2SP_121038_20241011_20241012_02_T1/LC09_L2SP_121038_20241011_20241012_02_T1_QA_PIXEL.TIF",
+        "window": [
+          4218,
+          4281,
+          128,
+          128
+        ]
+      },
+      "saturation": {
+        "url": "https://landsateuwest.blob.core.windows.net/landsat-c2/level-2/standard/oli-tirs/2024/121/038/LC09_L2SP_121038_20241011_20241012_02_T1/LC09_L2SP_121038_20241011_20241012_02_T1_QA_RADSAT.TIF",
+        "window": [
+          4218,
+          4281,
+          128,
+          128
+        ]
+      }
+    },
+    "center_lonlat": [
+      117.435,
+      31.615
+    ]
+  }
+]

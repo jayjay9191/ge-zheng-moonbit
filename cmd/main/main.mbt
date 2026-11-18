@@ -1,0 +1,63 @@
+///|
+extern "js" fn read_utf8(path : String) -> String =
+  #|(path) => {
+  #|  try { return process.getBuiltinModule("fs").readFileSync(path, "utf8"); }
+  #|  catch { return ""; }
+  #|}
+
+///|
+fn load_chip(path : String) -> @audit.Chip raise {
+  let raw = read_utf8(path)
+  if raw == "" {
+    fail("cannot read input file: " + path)
+  }
+  @json.from_json(@json.parse(raw, reject_duplicate_keys=true))
+}
+
+///|
+fn main {
+  let args = @env.args()
+  let start = if args.length() > 2 && args[2] == "--" { 3 } else { 2 }
+  let count = args.length() - start
+  let direct = count == 4 && args[start + 3] == "--direct"
+  if count != 3 && !direct {
+    println(
+      "Usage: moon run cmd/main -- <before.json> <after.json> <NDVI threshold> [--direct]",
+    )
+    @env.exit(2)
+  }
+  try {
+    let before = load_chip(args[start])
+    let after = load_chip(args[start + 1])
+    let threshold : Double = @json.from_json(@json.parse(args[start + 2]))
+    let result = @audit.compare(before, after, threshold, screen_qa=!direct)
+    let json = @json.ToJson::to_json(result)
+    if json is Object(fields) {
+      fields["delta"] = nullable_grid(result.delta)
+      fields["ndvi_before"] = nullable_grid(result.ndvi_before)
+      fields["ndvi_after"] = nullable_grid(result.ndvi_after)
+    }
+    println(json.stringify())
+  } catch {
+    @audit.Invalid(reason) => {
+      println("BLOCKED: " + reason)
+      @env.exit(2)
+    }
+    err => {
+      println("INPUT ERROR: " + err.to_string())
+      @env.exit(2)
+    }
+  }
+}
+
+///|
+fn nullable_grid(values : Array[Double?]) -> Json {
+  Json::array(
+    values.map(v => {
+      match v {
+        Some(n) => Json::number(n)
+        None => Json::null()
+      }
+    }),
+  )
+}

@@ -1,0 +1,9 @@
+.venv/
+_build/
+__pycache__/
+.mooncakes/
+.playwright-cli/
+/results/
+/gezheng.js
+/格证-实测报告.html
+/格证-肥东对照报告.html

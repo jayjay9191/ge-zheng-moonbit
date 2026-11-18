@@ -1,0 +1,7 @@
+import {
+  "ge-zheng/landsat" @audit,
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+}
+
+pkgtype(kind: "executable")

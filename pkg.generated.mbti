@@ -1,0 +1,87 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "ge-zheng/landsat"
+
+import {
+  "moonbitlang/core/debug",
+  "moonbitlang/core/json",
+}
+
+// Values
+pub fn compare(Chip, Chip, Double, screen_qa? : Bool) -> Audit raise AuditError
+
+// Errors
+#derive(@debug.Debug)
+pub suberror AuditError {
+  Invalid(String)
+}
+
+// Types and methods
+#derive(@json.ToJson)
+pub(all) struct Audit {
+  qa_screened : Bool
+  first_scene : String
+  second_scene : String
+  first_date : String
+  second_date : String
+  epsg : Int32
+  x : Int32
+  y : Int32
+  cell : Int32
+  width : Int32
+  height : Int32
+  overlap : Int32
+  valid : Int32
+  excluded : Int32
+  valid_fraction : Double
+  threshold : Double
+  gain : Int32
+  loss : Int32
+  stable : Int32
+  both_nonwater_valid : Int32
+  both_nonwater_gain : Int32
+  both_nonwater_loss : Int32
+  before_only_water : Int32
+  after_only_water : Int32
+  both_water : Int32
+  gain_m2 : Int64
+  loss_m2 : Int64
+  mean_delta : Double
+  max_abs_delta : Double
+  first_qa : Quality
+  second_qa : Quality
+  water_code : Array[Int32]
+  classes : Array[Int32]
+  delta : Array[Double?]
+  ndvi_before : Array[Double?]
+  ndvi_after : Array[Double?]
+}
+
+#derive(@json.FromJson)
+pub(all) struct Chip {
+  scene : String
+  date : String
+  epsg : Int32
+  x : Int32
+  y : Int32
+  width : Int32
+  height : Int32
+  cell : Int32
+  red : Array[Int32]
+  nir : Array[Int32]
+  qa : Array[Int32]
+  saturation : Array[Int32]
+}
+
+#derive(@json.ToJson)
+pub(all) struct Quality {
+  fill : Int32
+  cloud : Int32
+  shadow : Int32
+  snow : Int32
+  saturated : Int32
+  unusable_signal : Int32
+}
+
+// Type aliases
+
+// Traits
