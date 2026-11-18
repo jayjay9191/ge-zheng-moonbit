@@ -24,6 +24,7 @@ p{line-height:1.65;margin:7px 0}.eyebrow{font-weight:700;color:#9bd3b7;letter-sp
 figure{margin:0}figcaption{margin:0 0 8px;font-weight:700}
 canvas{display:block;width:100%;height:auto;image-rendering:pixelated;border-radius:8px;cursor:crosshair}canvas:focus-visible{outline:3px solid #0e6452;outline-offset:3px}
 button{background:#164f45;color:white;border:0;border-radius:7px;padding:8px 11px;font:inherit;cursor:pointer}
+table{width:100%;border-collapse:collapse;font-size:14px;text-align:right}caption{text-align:left;font-weight:700;margin-bottom:8px}th,td{padding:8px 5px;border-bottom:1px solid #d6e4db}th:first-child,td:first-child{text-align:left}
 a{color:#0e6452}.legend{display:flex;flex-wrap:wrap;gap:8px 18px;font-size:13px;margin:10px 0}
 .legend span:before{content:"";display:inline-block;width:10px;height:10px;background:var(--c);margin-right:5px}
 #cell{background:#e7f1e9;padding:10px;border-radius:8px;min-height:42px}.note{color:#4a625c;font-size:14px}
@@ -42,6 +43,7 @@ a{color:#0e6452}.legend{display:flex;flex-wrap:wrap;gap:8px 18px;font-size:13px;
 <div class="legend"><span style="--c:#12836b">上升</span><span style="--c:#c16a3f">下降</span><span style="--c:#dce5d0">阈值内</span><span style="--c:#506177">排除</span></div>
 <button id="example" type="button">定位一处被筛除的像元</button><p id="cell" aria-live="polite">点击地图，或聚焦后用方向键查看像元。</p>
 <p class="note">质检后的共同有效覆盖 __COVER__，其中两期均未标水的像元占 __LAND__。未标水是 QA 口径。被排除区域不下变化结论，保留的变化仍需结合地面样本解释。</p></section>
+<section class="panel"><table><caption>阈值敏感性 · 像元数</caption><thead><tr><th scope="col">|ΔNDVI|</th><th scope="col">直接算上升 / 下降</th><th scope="col">质检后上升 / 下降</th></tr></thead><tbody>__SENSITIVITY__</tbody></table><p class="note">三档阈值使用相同的共同有效像元。上方地图固定展示 0.15。</p></section>
 <p class="note"><a href="__A__">09-09 影像</a> · <a href="__B__">09-25 影像</a> · <a href="https://www.usgs.gov/landsat-missions/landsat-collection-2-quality-assessment-bands">USGS QA 定义</a></p></main>
 <script>
 const data=__PAYLOAD__, grid=data.direct;
@@ -81,7 +83,14 @@ for(const id of ["direct","screened"]){
 document.getElementById("example").onclick=()=>select((data.example.row-1)*grid.width+data.example.column-1);
 paint();
 </script></html>"""
+sensitivity_rows = []
+for row in summary["sensitivity"]:
+    cells = [f"{row['threshold']:.2f}"]
+    for mode in ("direct", "screened"):
+        cells.append(f"{row[mode]['gain']:,} / {row[mode]['loss']:,}")
+    sensitivity_rows.append("<tr>" + "".join(f"<td>{cell}</td>" for cell in cells) + "</tr>")
 values = {
+    "SENSITIVITY": "".join(sensitivity_rows),
     "DGAIN": f"{direct['gain']:,}", "DLOSS": f"{direct['loss']:,}", "DVALID": f"{direct['valid']:,}",
     "SGAIN": f"{screened['gain']:,}", "SLOSS": f"{screened['loss']:,}", "SVALID": f"{screened['valid']:,}",
     "REMOVED": f"{summary['qa_removed']:,}", "ABOVE": f"{summary['qa_removed_above_threshold']:,}",

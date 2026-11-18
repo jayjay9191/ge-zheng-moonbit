@@ -51,6 +51,24 @@ def main():
             "qa_before": a["qa"][i], "qa_after": b["qa"][i],
             "sat_before": a["saturation"][i], "sat_after": b["saturation"][i],
         }
+    sensitivity = []
+    for cutoff in (0.10, THRESHOLD, 0.20):
+        counts = {"threshold": cutoff}
+        for name, screened_mode, baseline in (("direct", False, direct), ("screened", True, screened)):
+            audit = baseline
+            if cutoff != THRESHOLD:
+                result, _ = run(first, second, cutoff, direct=not screened_mode)
+                assert result.returncode == 0, result
+                audit = json.loads(result.stdout)
+                verify(audit, a, b, cutoff, screen_qa=screened_mode)
+            assert audit["valid"] == baseline["valid"]
+            counts[name] = {key: audit[key] for key in ("gain", "loss")}
+        sensitivity.append(counts)
+    for key in ("direct", "screened"):
+        for change in ("gain", "loss"):
+            counts = [row[key][change] for row in sensitivity]
+            assert counts == sorted(counts, reverse=True), counts
+    summary["sensitivity"] = sensitivity
     (OUT / "summary.json").write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(summary, indent=2))
 
