@@ -3,6 +3,12 @@
 
 在计算植被指数变化前，先检查两期栅格是否落在同一网格，再剔除云、阴影、雪、饱和和无数据像元。输出共同有效率、阈值上下的变化面积、逐像元差值以及排除原因。首版面向北向、30 米、同一 WGS84 UTM 分区的 Landsat 8/9 Collection 2 Level-2 裁片。
 
+## 肥东实测 · 一分钟演示
+
+以同为 30 米的两期 Landsat 9 影像比较 NDVI。使用 QA 波段后，有效像元从 **16,377** 降至 **11,257**，其中有 **2,368** 个原本超过变化阈值的像元被筛除。ArcGIS Pro 3.7.1 独立复算后，两个模式的分类、面积和 NoData 掩膜与 MoonBit 全部一致。
+
+[下载一分钟 MP4](docs/feidong-60s.mp4) · [ArcGIS Pro 逐像元复算记录](docs/feidong-arcgis.json)
+
 ## 开始
 
 1. 双击 **格证-实测报告.html** 查看两期 NDVI、变化分类、三组验证和像元查询。可切换 0.10、0.15、0.20 三档阈值，也可以只看两期 QA 均未标水的区域。报告可以离线打开。
@@ -81,3 +87,16 @@ CLI 可用 `--min-coverage 0.70` 设门槛。肥东样例的共同有效覆盖�
 ### 轻量汇总
 
 批处理只看变化面积、覆盖和剔除项时，CLI 加 `--summary`。MoonBit 不保留逐像元数组，汇总口径保持一致。导出地图或追溯像元时使用完整输出。
+
+
+### ArcGIS Pro 复算
+
+先运行离线验收，再用已安装 `requirements-fetch.txt` 的 Python 导出 MoonBit 的两组栅格：
+
+```console
+python scripts/verify_local.py
+python scripts/export_geotiff.py results/feidong/direct.json results/feidong/gis/direct
+python scripts/export_geotiff.py results/feidong/screened.json results/feidong/gis/screened
+```
+
+在 **ArcGIS Pro 自带的 Python 环境**中从仓库根目录运行 `python scripts/verify_arcgis.py`。脚本将裁片的 B4、B5 和两组 QA 原值写入带地理参考的 GeoTIFF，用 ArcPy 读取后独立计算 NDVI，再对比 MoonBit 的逐像元分类与导出栅格。输出位于 `results/feidong/arcgis`，包括验证 JSON 和可加载到 GIS 的图层。第 10 行第 14 列因第一期标云被剔除，第 11 行第 43 列保留（ΔNDVI +0.180065）。

@@ -1,0 +1,43 @@
+{
+  "arcgis_pro": "3.7.1",
+  "shape": [
+    128,
+    128
+  ],
+  "epsg": 32650,
+  "cell_m": 30,
+  "scenes": [
+    "LC09_L2SP_121038_20240909_02_T1",
+    "LC09_L2SP_121038_20240925_02_T1"
+  ],
+  "direct": {
+    "valid": 16377,
+    "gain": 2058,
+    "loss": 973,
+    "stable": 13346,
+    "gain_m2": 1852200,
+    "loss_m2": 875700,
+    "max_delta_error": 0.0
+  },
+  "screened": {
+    "valid": 11257,
+    "gain": 86,
+    "loss": 577,
+    "stable": 10594,
+    "gain_m2": 77400,
+    "loss_m2": 519300,
+    "max_delta_error": 0.0
+  },
+  "masked_cloud": {
+    "row": 10,
+    "column": 14,
+    "before_qa": 22280,
+    "screened_delta": null
+  },
+  "retained_gain": {
+    "row": 11,
+    "column": 43,
+    "before_qa": 21824,
+    "screened_delta": 0.18006536778301918
+  }
+}
