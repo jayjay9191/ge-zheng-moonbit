@@ -98,7 +98,7 @@ def main():
         if name == "same":
             assert output["gain"] == output["loss"] == output["max_abs_delta"] == 0
         (OUT / f"{name}.json").write_text(run_result.stdout, encoding="utf-8")
-        results[name] = {k: v for k, v in output.items() if k not in ("classes", "delta", "ndvi_before", "ndvi_after", "water_code")}
+        results[name] = {k: v for k, v in output.items() if k not in ("classes", "delta", "ndvi_before", "ndvi_after", "water_code", "before_reason", "after_reason")}
         results[name].update(status="ok", reference_max_error=error, run_ms=duration)
     sensitivity = {}
     for cutoff in (0.10, 0.20):

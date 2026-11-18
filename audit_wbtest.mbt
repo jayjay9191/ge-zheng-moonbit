@@ -75,3 +75,13 @@ test "direct comparison isolates QA exclusion on the same grid" {
   assert_true(screened.qa_screened)
   assert_false(direct.qa_screened)
 }
+
+///|
+test "QA findings identify which date caused each exclusion" {
+  let before = test_chip(300000, 3500000, [10000, 10000, 10000], [0, 8, 0])
+  let after = { ..before, qa: [0, 0, 16], }
+  let result = compare(before, after, 0.15)
+  assert_eq(result.before_reason, [0, 2, 0])
+  assert_eq(result.after_reason, [0, 0, 3])
+  assert_eq(result.classes, [0, -2, -2])
+}

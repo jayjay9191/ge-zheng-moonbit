@@ -27,7 +27,7 @@ def main():
         error = verify(audit, a, b, THRESHOLD, screen_qa=screen)
         summary[name] = {
             k: v for k, v in audit.items()
-            if k not in ("classes", "delta", "ndvi_before", "ndvi_after", "water_code")
+            if k not in ("classes", "delta", "ndvi_before", "ndvi_after", "water_code", "before_reason", "after_reason")
         }
         summary[name].update(reference_max_error=error, run_ms=duration)
         (OUT / f"{name}.json").write_text(result.stdout, encoding="utf-8")

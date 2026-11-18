@@ -60,6 +60,8 @@ pub(all) struct Audit {
   max_abs_delta : Double
   first_qa : Quality
   second_qa : Quality
+  before_reason : Array[Int32] // 0 valid; 1 fill; 2 cloud; 3 shadow; 4 snow; 5 saturation; 6 reflectance
+  after_reason : Array[Int32]
   water_code : Array[Int32] // -1 excluded; bit 0 before, bit 1 after
   classes : Array[Int32] // -2 excluded, -1 loss, 0 stable, 1 gain
   delta : Array[Double?]
@@ -178,6 +180,8 @@ pub fn compare(
   let qa_b = Array::make(7, 0)
   let water_counts = Array::make(4, 0)
   let water_code = []
+  let before_reason = []
+  let after_reason = []
   let mut both_nonwater_gain = 0
   let mut both_nonwater_loss = 0
   let mut gain = 0
@@ -197,6 +201,8 @@ pub fn compare(
       let (reason_b, after) = pixel(b, ib, screen_qa)
       ndvi_before.push(if reason_a == 0 { Some(before) } else { None })
       ndvi_after.push(if reason_b == 0 { Some(after) } else { None })
+      before_reason.push(reason_a)
+      after_reason.push(reason_b)
       qa_a[reason_a] += 1
       qa_b[reason_b] += 1
       if reason_a != 0 || reason_b != 0 {
@@ -266,6 +272,8 @@ pub fn compare(
     before_only_water: water_counts[1],
     after_only_water: water_counts[2],
     both_water: water_counts[3],
+    before_reason,
+    after_reason,
     water_code,
     gain_m2: gain.to_int64() * 900L,
     loss_m2: loss.to_int64() * 900L,

@@ -49,6 +49,8 @@ pub(all) struct Audit {
   max_abs_delta : Double
   first_qa : Quality
   second_qa : Quality
+  before_reason : Array[Int32]
+  after_reason : Array[Int32]
   water_code : Array[Int32]
   classes : Array[Int32]
   delta : Array[Double?]
