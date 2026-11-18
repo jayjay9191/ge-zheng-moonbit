@@ -1,9 +1,10 @@
 """Compare the same Landsat grid twice, varying only the QA mask."""
-import hashlib
 import json
 from pathlib import Path
 
 from replay import ROOT, run, verify
+
+from source_manifest import load_pair
 
 DATA = ROOT / "data/feidong"
 OUT = ROOT / "results/feidong"
@@ -12,16 +13,12 @@ THRESHOLD = 0.15
 
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
-    sources = json.loads((DATA / "sources.json").read_bytes())
-    paths = [ROOT / item["file"] for item in sources]
-    for path, item in zip(paths, sources, strict=True):
-        assert hashlib.sha256(path.read_bytes()).hexdigest() == item["sha256"], path
-    a, b = [json.loads(path.read_bytes()) for path in paths]
+    (first, second), (a, b) = load_pair(ROOT, DATA / "sources.json")
     assert all(a[k] == b[k] for k in ("x", "y", "epsg", "cell", "height", "width"))
     summary = {}
     maps = []
     for name, screen in (("direct", False), ("screened", True)):
-        result, duration = run(*paths, THRESHOLD, direct=not screen)
+        result, duration = run(first, second, THRESHOLD, direct=not screen)
         assert result.returncode == 0, result
         audit = json.loads(result.stdout)
         error = verify(audit, a, b, THRESHOLD, screen_qa=screen)

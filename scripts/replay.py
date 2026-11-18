@@ -1,12 +1,13 @@
 
 """Offline regression and independent integer-ratio reference for the bundled chips."""
-import hashlib
 import json
 from fractions import Fraction
 from pathlib import Path
 import subprocess
 import sys
 from time import perf_counter
+
+from source_manifest import load_pair
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data"
@@ -77,11 +78,7 @@ def verify(result, a, b, threshold, screen_qa=True):
 
 def main():
     OUT.mkdir(exist_ok=True)
-    sources = json.loads((DATA / "sources.json").read_text(encoding="utf-8"))
-    first, second = (ROOT / entry["file"] for entry in sources)
-    for entry, path in zip(sources, (first, second), strict=True):
-        assert hashlib.sha256(path.read_bytes()).hexdigest() == entry["sha256"]
-    a, b = (json.loads(path.read_text(encoding="utf-8")) for path in (first, second))
+    (first, second), (a, b) = load_pair(ROOT, DATA / "sources.json")
     shifted = OUT / "half-pixel-input.json"
     shifted.write_text(json.dumps({**a, "x": a["x"] + 15}, separators=(",", ":")), encoding="utf-8")
     results = {}
