@@ -83,10 +83,12 @@ pub fn change_regions(
     seen[i] = true
     while stack.pop() is Some(index) {
       pixels += 1
+      let base_row = index / audit.width
+      let base_col = index % audit.width
       for j in 0..<connectivity {
         let (dr, dc) = steps[j]
-        let row = index / audit.width + dr
-        let col = index % audit.width + dc
+        let row = base_row + dr
+        let col = base_col + dc
         if row < 0 || row >= audit.height || col < 0 || col >= audit.width {
           continue
         }

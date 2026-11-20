@@ -40,8 +40,14 @@ fn main {
     let mut land_only = false
     let mut tiles : (Int32, Int32)? = None
     let mut index = start + 3
+    let seen : Map[String, Bool] = Map([])
     while index < args.length() {
-      match args[index] {
+      let flag = args[index]
+      if seen.contains(flag) {
+        fail("duplicate argument: " + flag)
+      }
+      seen[flag] = true
+      match flag {
         "--direct" => direct = true
         "--land-only" => land_only = true
         "--summary" => summary = true

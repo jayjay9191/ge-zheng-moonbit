@@ -22,7 +22,7 @@ def run_pair(paths, *flags, success=True, threshold="0.15"):
         ["node", str(PROGRAM), *paths, threshold, *flags],
         cwd=ROOT, capture_output=True, text=True, encoding="utf-8", timeout=30,
     )
-    assert result.returncode == (0 if success else 2), result.stdout + result.stderr
+    assert result.returncode == (0 if success else 2), (result.stdout + result.stderr)[:600]
     return json.loads(result.stdout) if success else result.stdout
 
 
@@ -73,6 +73,18 @@ def verify_shifted():
                     verify(result, *chips, cutoff, screen_qa=not flags)
                     assert result["overlap"] == 6
                     assert row["counts"] == {key: result[key] for key in row["counts"]}
+        full = run_pair(paths)
+        edge = max(abs(d) for d in full["delta"] if d is not None)
+        boundaries = (edge, edge / 2, edge, 2.0)
+        for pair in (paths, paths[::-1]):
+            sweep = run_pair(pair, "--sweep", ",".join(map(str, boundaries)))
+            assert [entry["threshold"] for entry in sweep["rows"]] == list(boundaries)
+            evidence = run_pair(pair)
+            deltas = [d for d in evidence["delta"] if d is not None]
+            for row in sweep["rows"]:
+                cutoff = row["threshold"]
+                assert row["counts"]["gain"] == sum(d >= cutoff for d in deltas)
+                assert row["counts"]["loss"] == sum(d <= -cutoff for d in deltas)
         for flags in ((), ("--direct",)):
             full = run_pair(paths, *flags)
             for row, column in ((1, 1), (1, 2), (2, 3)):
@@ -98,7 +110,7 @@ def verify_shifted():
         run_pair(paths, "--qa-impact", "--min-coverage", "0.01", success=False, threshold="0.1")
         run_pair(paths, "--summary", success=False, threshold="0.1")
         print("PASS QA impact reports fully masked windows; coverage floor and change classification still reject")
-    print("PASS shifted 3x2 window in both directions, QA modes and threshold order")
+    print("PASS shifted 3x2 window, exact threshold equality, reverse direction and repeated cutoffs")
 
 
 def main():
@@ -119,6 +131,9 @@ def main():
         "data": ([11446, 10703, 10013], [285, 94, 52], 14224, 2160, 11239, 10797),
         "data/feidong": ([155, 86, 49], [1495, 577, 290], 11257, 5127, 3031, 663),
     }
+    for args in (("--direct", "--direct"), ("--regions", "4", "--regions", "8"),
+                 ("--min-coverage", "0.01", "--min-coverage", "0.02")):
+        assert "duplicate argument:" in run("data/feidong", *args, success=False)
     compared = 0
     max_error = 0.0
     for folder, (gains, losses, valid, excluded, changed_before, changed_after) in expected.items():

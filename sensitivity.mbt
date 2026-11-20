@@ -89,8 +89,11 @@ fn count_thresholds(
   screen_qa : Bool,
 ) -> Array[ThresholdCounts] {
   let { dx, dy, col0, row0, col1, row1, } = window
-  let gains = Array::make(thresholds.length(), 0)
-  let losses = Array::make(thresholds.length(), 0)
+  let size = thresholds.length()
+  let ordered = Array::makei(size, i => i)
+  ordered.sort_by((a, b) => thresholds[a].compare(thresholds[b]))
+  let gain_bins = Array::make(size + 1, 0)
+  let loss_bins = Array::make(size + 1, 0)
   let mut valid = 0
   for row in row0..<row1 {
     for col in col0..<col1 {
@@ -105,17 +108,41 @@ fn count_thresholds(
       }
       valid += 1
       let delta = b - a
-      for i in 0..<thresholds.length() {
-        match classify_change(delta, thresholds[i]) {
-          1 => gains[i] += 1
-          -1 => losses[i] += 1
-          _ => ()
+      let magnitude = if delta < 0.0 { -delta } else { delta }
+      // Find the number of thresholds met, including equal boundaries and ties.
+      let mut lo = 0
+      let mut hi = size
+      while lo < hi {
+        let mid = lo + (hi - lo) / 2
+        if thresholds[ordered[mid]] <= magnitude {
+          lo = mid + 1
+        } else {
+          hi = mid
+        }
+      }
+      if lo > 0 {
+        if delta > 0.0 {
+          gain_bins[lo] += 1
+        } else {
+          loss_bins[lo] += 1
         }
       }
     }
   }
+  // Accumulate bins from the largest threshold down, then restore request order.
+  let gains = Array::make(size, 0)
+  let losses = Array::make(size, 0)
+  let mut gain = 0
+  let mut loss = 0
+  for offset in 0..<size {
+    let i = size - offset - 1
+    gain += gain_bins[i + 1]
+    loss += loss_bins[i + 1]
+    gains[ordered[i]] = gain
+    losses[ordered[i]] = loss
+  }
   let overlap = (row1 - row0) * (col1 - col0)
-  Array::makei(thresholds.length(), i => {
+  Array::makei(size, i => {
     let gain = gains[i]
     let loss = losses[i]
     {
