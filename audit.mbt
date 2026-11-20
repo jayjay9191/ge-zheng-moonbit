@@ -161,6 +161,11 @@ fn quality(counts : Array[Int32]) -> Quality {
 }
 
 ///|
+fn water_state(a : Chip, ia : Int32, b : Chip, ib : Int32) -> Int32 {
+  ((a.qa[ia] & 128) >> 7) + ((b.qa[ib] & 128) >> 6)
+}
+
+///|
 fn classify_change(delta : Double, threshold : Double) -> Int32 {
   if delta >= threshold {
     1
@@ -179,20 +184,19 @@ pub fn validate_threshold(threshold : Double) -> Unit raise AuditError {
 }
 
 ///|
-pub fn compare(
-  a : Chip,
-  b : Chip,
-  threshold : Double,
-  screen_qa~ : Bool = true,
-  min_coverage~ : Double = 0.0,
-  pixel_grids~ : Bool = true,
-) -> Audit raise AuditError {
+priv struct CommonWindow {
+  dx : Int32
+  dy : Int32
+  col0 : Int32
+  row0 : Int32
+  col1 : Int32
+  row1 : Int32
+}
+
+///|
+fn common_window(a : Chip, b : Chip) -> CommonWindow raise AuditError {
   validate(a)
   validate(b)
-  validate_threshold(threshold)
-  if !(min_coverage >= 0.0 && min_coverage <= 1.0) {
-    raise Invalid("minimum coverage must be in [0, 1]")
-  }
   if a.epsg != b.epsg {
     raise Invalid("CRS mismatch; refusing to compare")
   }
@@ -212,6 +216,46 @@ pub fn compare(
   if col1 <= col0 || row1 <= row0 {
     raise Invalid("chips do not overlap")
   }
+  { dx, dy, col0, row0, col1, row1, }
+}
+
+///|
+fn validate_coverage(minimum : Double) -> Unit raise AuditError {
+  if !(minimum >= 0.0 && minimum <= 1.0) {
+    raise Invalid("minimum coverage must be in [0, 1]")
+  }
+}
+
+///|
+fn shared_coverage(
+  valid : Int32,
+  overlap : Int32,
+  minimum : Double,
+) -> Double raise AuditError {
+  if valid == 0 {
+    raise Invalid("no pixels are valid in both dates")
+  }
+  let coverage = valid.to_double() / overlap.to_double()
+  if coverage < minimum {
+    raise Invalid(
+      "shared valid coverage \{valid}/\{overlap} is below minimum fraction \{minimum}",
+    )
+  }
+  coverage
+}
+
+///|
+pub fn compare(
+  a : Chip,
+  b : Chip,
+  threshold : Double,
+  screen_qa~ : Bool = true,
+  min_coverage~ : Double = 0.0,
+  pixel_grids~ : Bool = true,
+) -> Audit raise AuditError {
+  validate_threshold(threshold)
+  validate_coverage(min_coverage)
+  let { dx, dy, col0, row0, col1, row1, } = common_window(a, b)
   let qa_a = Array::make(7, 0)
   let qa_b = Array::make(7, 0)
   let water_counts = Array::make(4, 0)
@@ -254,7 +298,7 @@ pub fn compare(
           delta.push(None)
         }
       } else {
-        let water = ((a.qa[ia] & 128) >> 7) + ((b.qa[ib] & 128) >> 6)
+        let water = water_state(a, ia, b, ib)
         if pixel_grids {
           water_code.push(water)
         }
@@ -298,15 +342,7 @@ pub fn compare(
   let height = row1 - row0
   let overlap = width * height
   let valid = gain + loss + stable
-  if valid == 0 {
-    raise Invalid("no pixels are valid in both dates")
-  }
-  let coverage = valid.to_double() / overlap.to_double()
-  if coverage < min_coverage {
-    raise Invalid(
-      "shared valid coverage \{valid}/\{overlap} is below minimum fraction \{min_coverage}",
-    )
-  }
+  let coverage = shared_coverage(valid, overlap, min_coverage)
   {
     qa_screened: screen_qa,
     first_scene: a.scene,
@@ -380,48 +416,44 @@ pub fn inspect_pixel(
   row : Int32,
   column : Int32,
 ) -> PixelEvidence raise AuditError {
-  validate(a)
-  validate(b)
+  let { dx, dy, col0, row0, col1, row1, } = common_window(a, b)
   validate_threshold(result.threshold)
+  let width = col1 - col0
+  let height = row1 - row0
+  let size = width * height
   if result.first_scene != a.scene ||
     result.second_scene != b.scene ||
     result.first_date != a.date ||
     result.second_date != b.date ||
     result.epsg != a.epsg ||
-    result.epsg != b.epsg ||
     result.cell != 30 ||
-    result.width < 1 ||
-    result.width > 2048 ||
-    result.height < 1 ||
-    result.height > 2048 {
-    raise Invalid("pixel evidence sources or audit metadata do not match")
+    result.x != a.x + col0 * 30 ||
+    result.y != a.y - row0 * 30 ||
+    result.width != width ||
+    result.height != height ||
+    result.overlap != size {
+    raise Invalid("pixel evidence sources or common window do not match")
   }
-  let size = result.width * result.height
-  if result.before_reason.length() != size ||
-    result.after_reason.length() != size ||
-    result.delta.length() != size ||
-    result.classes.length() != size {
+  if [
+      result.before_reason.length(),
+      result.after_reason.length(),
+      result.delta.length(),
+      result.classes.length(),
+      result.ndvi_before.length(),
+      result.ndvi_after.length(),
+      result.water_code.length(),
+    ].any(n => n != size) {
     raise Invalid("pixel evidence requires complete result grids")
-  }
-  for chip in [a, b] {
-    let east = result.x - chip.x
-    let south = chip.y - result.y
-    if east < 0 ||
-      south < 0 ||
-      east % 30 != 0 ||
-      south % 30 != 0 ||
-      east / 30 + result.width > chip.width ||
-      south / 30 + result.height > chip.height {
-      raise Invalid("pixel evidence window is not aligned within both sources")
-    }
   }
   if row < 1 || row > result.height || column < 1 || column > result.width {
     raise Invalid("pixel is outside the common grid")
   }
   let x = result.x + (column - 1) * result.cell
   let y = result.y - (row - 1) * result.cell
-  let ia = (a.y - y) / a.cell * a.width + (x - a.x) / a.cell
-  let ib = (b.y - y) / b.cell * b.width + (x - b.x) / b.cell
+  let grid_row = row0 + row - 1
+  let grid_col = col0 + column - 1
+  let ia = grid_row * a.width + grid_col
+  let ib = (grid_row - dy) * b.width + grid_col - dx
   let i = (row - 1) * result.width + column - 1
   let (reason_a, before) = pixel(a, ia, result.qa_screened)
   let (reason_b, after) = pixel(b, ib, result.qa_screened)
@@ -434,7 +466,17 @@ pub fn inspect_pixel(
     Some(d) => classify_change(d, result.threshold)
     None => -2
   }
-  if result.before_reason[i] != reason_a ||
+  let before_ndvi = if reason_a == 0 { Some(before) } else { None }
+  let after_ndvi = if reason_b == 0 { Some(after) } else { None }
+  let water = if expected_delta is Some(_) {
+    water_state(a, ia, b, ib)
+  } else {
+    -1
+  }
+  if result.ndvi_before[i] != before_ndvi ||
+    result.ndvi_after[i] != after_ndvi ||
+    result.water_code[i] != water ||
+    result.before_reason[i] != reason_a ||
     result.after_reason[i] != reason_b ||
     result.delta[i] != expected_delta ||
     result.classes[i] != expected_class {

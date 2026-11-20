@@ -67,18 +67,49 @@ pub fn sensitivity(
   for threshold in thresholds {
     validate_threshold(threshold)
   }
-  let rows : Array[ThresholdCounts] = []
-  for threshold in thresholds {
-    let result = compare(
-      before,
-      after,
-      threshold,
-      screen_qa~,
-      min_coverage~,
-      pixel_grids=false,
-    )
-    rows.push({ threshold, counts: change_counts(result), })
+  validate_coverage(min_coverage)
+  let { dx, dy, col0, row0, col1, row1, } = common_window(before, after)
+  let gains = Array::make(thresholds.length(), 0)
+  let losses = Array::make(thresholds.length(), 0)
+  let mut valid = 0
+  for row in row0..<row1 {
+    for col in col0..<col1 {
+      let (reason_a, a) = pixel(before, row * before.width + col, screen_qa)
+      let (reason_b, b) = pixel(
+        after,
+        (row - dy) * after.width + col - dx,
+        screen_qa,
+      )
+      if reason_a != 0 || reason_b != 0 {
+        continue
+      }
+      valid += 1
+      let delta = b - a
+      for i in 0..<thresholds.length() {
+        match classify_change(delta, thresholds[i]) {
+          1 => gains[i] += 1
+          -1 => losses[i] += 1
+          _ => ()
+        }
+      }
+    }
   }
+  let overlap = (row1 - row0) * (col1 - col0)
+  ignore(shared_coverage(valid, overlap, min_coverage))
+  let rows = Array::makei(thresholds.length(), i => {
+    let gain = gains[i]
+    let loss = losses[i]
+    {
+      threshold: thresholds[i],
+      counts: {
+        gain,
+        loss,
+        stable: valid - gain - loss,
+        valid,
+        excluded: overlap - valid,
+      },
+    }
+  })
   let gain_relative_range = relative_range(rows.map(row => row.counts.gain))
   let loss_relative_range = relative_range(rows.map(row => row.counts.loss))
   let sensitive = gain_relative_range > 0.5 || loss_relative_range > 0.5

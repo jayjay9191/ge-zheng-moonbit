@@ -283,3 +283,31 @@ test "tile counts cannot silently contradict the whole-window totals" {
   assert_eq(tile_counts(result, rows=1, columns=1)[0].counts.stable, 1)
   assert_eq(result.classes, [0])
 }
+
+///|
+test "pixel evidence requires the complete common window" {
+  let full = test_chip(300000, 3500000, [10000, 11000], [0, 0])
+  let single = test_chip(300000, 3500000, [10000], [0])
+  let cropped = compare(single, single, 0.15)
+  let result = Ok(inspect_pixel(full, full, cropped, 1, 1)) catch {
+    e => Err(e)
+  }
+  assert_true(result is Err(Invalid(_)))
+}
+
+///|
+test "pixel evidence verifies both NDVI readings and water state" {
+  let chip = test_chip(300000, 3500000, [10000], [128])
+  let full = compare(chip, chip, 0.15)
+  for
+    changed in [
+      { ..full, ndvi_before: [None], },
+      { ..full, ndvi_after: [Some(0.0)], },
+      { ..full, water_code: [0], },
+    ] {
+    let result = Ok(inspect_pixel(chip, chip, changed, 1, 1)) catch {
+      e => Err(e)
+    }
+    assert_true(result is Err(Invalid(_)))
+  }
+}

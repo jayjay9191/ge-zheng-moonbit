@@ -34,16 +34,36 @@ def reference(chip, i, screen_qa=True):
     return Fraction(b - a, a + b)
 
 
+def locations(chip):
+    return {
+        (chip["x"] + col * chip["cell"], chip["y"] - row * chip["cell"]):
+            row * chip["width"] + col
+        for row in range(chip["height"]) for col in range(chip["width"])
+    }
+
+
 def verify(result, a, b, threshold, screen_qa=True):
     assert result["qa_screened"] == screen_qa
-    count = len(a["qa"])
+    first, second = locations(a), locations(b)
+    points = [point for point in first if point in second]
+    count = len(points)
+    xs, ys = zip(*points)
+    assert (result["x"], result["y"]) == (min(xs), max(ys))
+    assert (result["width"], result["height"]) == (len(set(xs)), len(set(ys)))
     cut = Fraction(str(threshold))
     counts = {-2: 0, -1: 0, 0: 0, 1: 0}
     max_error = 0.0
     water_counts = [0, 0, 0, 0]
     land_change = {-1: 0, 0: 0, 1: 0}
-    for i in range(count):
-        x, y = reference(a, i, screen_qa), reference(b, i, screen_qa)
+    for i, point in enumerate(points):
+        ia, ib = first[point], second[point]
+        x, y = reference(a, ia, screen_qa), reference(b, ib, screen_qa)
+        for field, value in (("ndvi_before", x), ("ndvi_after", y)):
+            actual = result[field][i]
+            if value is None:
+                assert actual is None, (field, i)
+            else:
+                assert abs(float(value) - actual) < 1e-12, (field, i)
         if x is None or y is None:
             label = -2
             assert result["water_code"][i] == -1
@@ -51,8 +71,8 @@ def verify(result, a, b, threshold, screen_qa=True):
         else:
             d = y - x
             label = int(d >= cut) - int(d <= -cut)
-            a_is_water = bool(a["qa"][i] & 128)
-            b_is_water = bool(b["qa"][i] & 128)
+            a_is_water = bool(a["qa"][ia] & 128)
+            b_is_water = bool(b["qa"][ib] & 128)
             code = int(a_is_water) + 2 * int(b_is_water)
             assert code == result["water_code"][i]
             water_counts[code] += 1
