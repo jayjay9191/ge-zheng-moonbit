@@ -132,6 +132,7 @@ def main():
             assert row["counts"] == {key: screened[key] for key in row["counts"]}
             if cutoff == 0.15:
                 classes = screened["classes"]
+                water_codes = screened["water_code"]
             assert row["counts"] == dict(gain=gains[i], loss=losses[i], valid=valid,
                                           excluded=excluded, stable=valid-gains[i]-losses[i])
         assert run(folder, "--sweep", "0.2,0.1")["rows"][0]["threshold"] == 0.2
@@ -156,18 +157,26 @@ def main():
                                               excluded=labels[-2], valid=sum(labels.values()) - labels[-2])
             for field in ("gain", "loss", "stable", "valid", "excluded"):
                 assert sum(tile["counts"][field] for tile in tiles) == whole[field]
+        land_classes = [code if water == 0 else -2 for code, water in zip(classes, water_codes)]
         for connectivity in (4, 8):
             for minimum in (1, 4):
-                flags = ("--min-region-pixels", str(minimum)) if minimum != 1 else ()
-                regions = run(folder, "--regions", str(connectivity), *flags)
-                assert regions["connectivity"] == connectivity and regions["min_pixels"] == minimum
-                for trend, code in (("gain", 1), ("loss", -1)):
-                    actual = regions[trend]
-                    actual["largest_area_m2"] = int(actual["largest_area_m2"])
-                    assert actual == region_reference(classes, before["width"], code, connectivity, minimum)
-                print(f"PASS {folder} {connectivity}-neighbors, minimum {minimum}: "
-                      f"loss retained/discarded {regions['loss']['regions']}/"
-                      f"{regions['loss']['discarded_regions']}, largest {regions['loss']['largest_pixels']} pixels")
+                minimum_flags = ("--min-region-pixels", str(minimum)) if minimum != 1 else ()
+                for land in (False, True):
+                    flags = minimum_flags + (("--land-only",) if land else ())
+                    regions = run(folder, "--regions", str(connectivity), *flags)
+                    assert regions["connectivity"] == connectivity and regions["min_pixels"] == minimum
+                    assert regions["land_only"] is land
+                    cells = land_classes if land else classes
+                    for trend, code in (("gain", 1), ("loss", -1)):
+                        actual = regions[trend]
+                        actual["largest_area_m2"] = int(actual["largest_area_m2"])
+                        reference = region_reference(cells, before["width"], code, connectivity, minimum)
+                        reference["water_excluded_pixels"] = classes.count(code) - cells.count(code)
+                        assert actual == reference
+                    if connectivity == 4 and minimum == 1 and land:
+                        print(f"PASS {folder} land-only: {regions['gain']['pixels']}/{regions['loss']['pixels']} "
+                              f"gain/loss pixels, {regions['gain']['water_excluded_pixels']}/"
+                              f"{regions['loss']['water_excluded_pixels']} water exclusions")
         print(f"PASS {folder}: sweep, QA impact {changed_before} -> {changed_after}, 3 tile shapes")
     print(f"PASS independent Fraction replay: {compared:,} pixel comparisons; max delta error {max_error:.3g}")
     verify_shifted()
@@ -177,7 +186,7 @@ def main():
                   ("--qa-impact", "--direct"), ("--sweep", "--summary"),
                   ("--regions", "6"), ("--regions", "--tiles", "2x2"),
                   ("--min-region-pixels", "4"), ("--regions", "--min-region-pixels", "0"),
-                  ("--regions", "--min-region-pixels")):
+                  ("--regions", "--min-region-pixels"), ("--land-only",)):
         run("data", *flags, success=False)
     for threshold in ("0", "-0.1", "2.01"):
         run("data", "--sweep", threshold=threshold, success=False)

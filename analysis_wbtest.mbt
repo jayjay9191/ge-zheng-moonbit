@@ -407,3 +407,31 @@ test "change regions separate diagonal and opposite trends" {
     (Ok(change_regions({ ..grid, gain: 2, })) catch { e => Err(e) }) is Err(_),
   )
 }
+
+///|
+test "land-only regions cannot use water pixels to connect land changes" {
+  let a = test_chip(300000, 3500000, [14000, 14000, 14000], [0, 0, 0])
+  let b = { ..a, red: [10000, 10000, 10000], qa: [0, 128, 0], }
+  let grid = compare(a, b, 0.15)
+  assert_eq(change_regions(grid).gain.regions, 1)
+  let land = change_regions(grid, land_only=true)
+  assert_true(land.land_only)
+  assert_eq([land.gain.pixels, land.gain.regions, land.gain.largest_pixels], [
+    2, 2, 1,
+  ])
+  assert_eq(land.gain.water_excluded_pixels, 1)
+  let minimum = change_regions(grid, land_only=true, min_pixels=2)
+  assert_eq(
+    [
+      minimum.gain.pixels,
+      minimum.gain.discarded_pixels,
+      minimum.gain.water_excluded_pixels,
+    ],
+    [0, 2, 1],
+  )
+  let corrupt = { ..grid, water_code: [0, 4, 0], }
+  assert_true(
+    (Ok(change_regions(corrupt, land_only=true)) catch { e => Err(e) })
+    is Err(_),
+  )
+}

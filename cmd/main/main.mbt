@@ -20,7 +20,7 @@ fn main {
   let start = if args.length() > 2 && args[2] == "--" { 3 } else { 2 }
   if args.length() < start + 3 {
     println(
-      "Usage: moon run cmd/main -- <before.json> <after.json> <NDVI threshold> [--direct] [--min-coverage <fraction>] [--inspect <row> <column> | --summary | --sweep [0.10,0.15,0.20] | --qa-impact | --tiles 2x2 | --regions [4|8] [--min-region-pixels <pixels>]]",
+      "Usage: moon run cmd/main -- <before.json> <after.json> <NDVI threshold> [--direct] [--min-coverage <fraction>] [--inspect <row> <column> | --summary | --sweep [0.10,0.15,0.20] | --qa-impact | --tiles 2x2 | --regions [4|8] [--min-region-pixels <pixels>] [--land-only]]",
     )
     @env.exit(2)
   }
@@ -37,11 +37,13 @@ fn main {
     let mut impact = false
     let mut regions : Int32? = None
     let mut region_min : Int32? = None
+    let mut land_only = false
     let mut tiles : (Int32, Int32)? = None
     let mut index = start + 3
     while index < args.length() {
       match args[index] {
         "--direct" => direct = true
+        "--land-only" => land_only = true
         "--summary" => summary = true
         "--qa-impact" => impact = true
         "--sweep" => {
@@ -119,8 +121,8 @@ fn main {
         "choose only one of --summary, --inspect, --sweep, --qa-impact, --tiles and --regions",
       )
     }
-    if region_min is Some(_) && regions is None {
-      fail("--min-region-pixels requires --regions")
+    if (region_min is Some(_) || land_only) && regions is None {
+      fail("--min-region-pixels and --land-only require --regions")
     }
     if impact && direct {
       fail("--qa-impact compares both QA policies; do not also select --direct")
@@ -177,7 +179,12 @@ fn main {
     }
     if regions is Some(connectivity) {
       let min_pixels = region_min.unwrap_or(1)
-      let patches = @audit.change_regions(result, connectivity~, min_pixels~)
+      let patches = @audit.change_regions(
+        result,
+        connectivity~,
+        min_pixels~,
+        land_only~,
+      )
       println(@json.ToJson::to_json(patches).stringify())
       return
     }

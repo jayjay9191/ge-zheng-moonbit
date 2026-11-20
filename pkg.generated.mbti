@@ -7,7 +7,7 @@ import {
 }
 
 // Values
-pub fn change_regions(Audit, connectivity? : Int32, min_pixels? : Int32) -> ChangeRegions raise AuditError
+pub fn change_regions(Audit, connectivity? : Int32, min_pixels? : Int32, land_only? : Bool) -> ChangeRegions raise AuditError
 
 pub fn compare(Chip, Chip, Double, screen_qa? : Bool, min_coverage? : Double, pixel_grids? : Bool) -> Audit raise AuditError
 
@@ -88,6 +88,7 @@ pub(all) struct ChangeCounts {
 pub(all) struct ChangeRegions {
   connectivity : Int32
   min_pixels : Int32
+  land_only : Bool
   gain : RegionStats
   loss : RegionStats
 }
@@ -160,6 +161,7 @@ pub(all) struct RegionStats {
   isolated_pixels : Int32
   discarded_regions : Int32
   discarded_pixels : Int32
+  water_excluded_pixels : Int32
   largest_pixels : Int32
   largest_area_m2 : Int64
 }
