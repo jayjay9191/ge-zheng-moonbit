@@ -613,3 +613,21 @@ test "NDVI disagreement separates net changes from spatial exchange" {
     (0, 2),
   )
 }
+
+///|
+test "NDVI band accounting reconciles retained inflow outflow and gross exchange" {
+  let (a, b) = analysis_pair(true)
+  let summary = summarize_ndvi_transitions(ndvi_transitions(a, b, [0.2, 0.5]))
+  assert_eq(summary.bands.map(band => band.retained), [148, 1291, 9114])
+  assert_eq(summary.bands.map(band => band.gained), [44, 500, 160])
+  assert_eq(summary.bands.map(band => band.lost), [17, 204, 483])
+  assert_eq(summary.bands.map(band => band.net), [27, 296, -323])
+  assert_eq(summary.bands.map(band => band.exchange), [17, 204, 160])
+  assert_eq(
+    summary.bands.fold(init=0, (sum, band) => sum + band.exchange),
+    summary.allocation_disagreement,
+  )
+  let reversed = summarize_ndvi_transitions(ndvi_transitions(b, a, [0.2, 0.5]))
+  assert_eq(reversed.bands.map(band => band.gained), [17, 204, 483])
+  assert_eq(reversed.bands.map(band => band.net), [-27, -296, 323])
+}

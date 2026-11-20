@@ -176,6 +176,13 @@ def main():
                 "after_counts": after_totals,
                 "quantity_disagreement": quantity,
                 "allocation_disagreement": off_diagonal - quantity,
+                "bands": [
+                    dict(retained=expected_transitions[i][i],
+                         gained=after_totals[i] - expected_transitions[i][i],
+                         lost=before_totals[i] - expected_transitions[i][i],
+                         net=after_totals[i] - before_totals[i],
+                         exchange=min(before_totals[i], after_totals[i]) - expected_transitions[i][i])
+                    for i in range(3)],
                 "lower": sum(expected_transitions[i][j] for i in range(3) for j in range(i)),
                 "same": sum(expected_transitions[i][i] for i in range(3)),
                 "higher": sum(expected_transitions[i][j] for i in range(3) for j in range(i + 1, 3)),
@@ -189,6 +196,11 @@ def main():
                                 for row, column in zip(expected_land, zip(*expected_land))) // 2
             assert land_summary["quantity_disagreement"] == land_quantity
             assert land_summary["allocation_disagreement"] == land["valid"] - land_summary["same"] - land_quantity
+            for i, band in enumerate(land_summary["bands"]):
+                assert band["retained"] == expected_land[i][i]
+                assert band["gained"] == sum(expected_land[j][i] for j in range(3) if j != i)
+                assert band["lost"] == sum(expected_land[i][j] for j in range(3) if j != i)
+            assert sum(band["exchange"] for band in land_summary["bands"]) == land_summary["allocation_disagreement"]
             assert land["land_only"] is True and land["qa_screened"] is (not flags)
             assert abs(land["valid_fraction"] - land["valid"] / len(common)) < 1e-15
             assert land["valid"] == sum(map(sum, expected_land))

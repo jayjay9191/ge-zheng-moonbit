@@ -90,6 +90,19 @@ pub fn ndvi_transitions(
 
 ///|
 #derive(ToJson)
+pub(all) struct NdviBandChange {
+  retained : Int32
+  gained : Int32
+  lost : Int32
+  net : Int32
+  exchange : Int32
+}
+
+///|
+pub extend NdviBandChange with @json.ToJson::{to_json}
+
+///|
+#derive(ToJson)
 pub(all) struct NdviTransitionSummary {
   before_counts : Array[Int32]
   after_counts : Array[Int32]
@@ -98,6 +111,7 @@ pub(all) struct NdviTransitionSummary {
   higher : Int32
   quantity_disagreement : Int32
   allocation_disagreement : Int32
+  bands : Array[NdviBandChange]
 }
 
 ///|
@@ -152,14 +166,17 @@ pub fn summarize_ndvi_transitions(
   if total != matrix.valid {
     raise Invalid("NDVI transition count disagrees with the valid pixel total")
   }
+  let details = Array::makei(bands, i => {
+    let retained = matrix.counts[i][i]
+    let gained = after_counts[i] - retained
+    let lost = before_counts[i] - retained
+    let exchange = if gained < lost { gained } else { lost }
+    { retained, gained, lost, net: gained - lost, exchange, }
+  })
   // Half the L1 distance of equal-total marginals equals the sum of positive offsets.
-  let mut quantity_disagreement = 0
-  for band in 0..<bands {
-    let net = after_counts[band] - before_counts[band]
-    if net > 0 {
-      quantity_disagreement += net
-    }
-  }
+  let quantity_disagreement = details.fold(init=0, (sum, band) => {
+    sum + (if band.net > 0 { band.net } else { 0 })
+  })
   {
     before_counts,
     after_counts,
@@ -168,5 +185,6 @@ pub fn summarize_ndvi_transitions(
     higher,
     quantity_disagreement,
     allocation_disagreement: lower + higher - quantity_disagreement,
+    bands: details,
   }
 }

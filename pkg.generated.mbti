@@ -117,6 +117,16 @@ pub(all) struct Chip {
 pub fn Chip::from_json(@json.Json, @json.DecodeContext) -> Self raise @json.JsonDecodeError
 
 #derive(@json.ToJson)
+pub(all) struct NdviBandChange {
+  retained : Int32
+  gained : Int32
+  lost : Int32
+  net : Int32
+  exchange : Int32
+}
+pub fn NdviBandChange::to_json(Self) -> @json.Json
+
+#derive(@json.ToJson)
 pub(all) struct NdviTransitionSummary {
   before_counts : Array[Int32]
   after_counts : Array[Int32]
@@ -125,6 +135,7 @@ pub(all) struct NdviTransitionSummary {
   higher : Int32
   quantity_disagreement : Int32
   allocation_disagreement : Int32
+  bands : Array[NdviBandChange]
 }
 pub fn NdviTransitionSummary::to_json(Self) -> @json.Json
 
