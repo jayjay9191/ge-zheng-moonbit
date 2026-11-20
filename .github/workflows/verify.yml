@@ -23,6 +23,8 @@ jobs:
           echo "$HOME/.moon/bin" >> "$GITHUB_PATH"
       - name: Verify clean build and both real Landsat cases
         run: python scripts/verify_local.py
+      - name: Verify threshold sweep, QA pairing and tile CLI
+        run: python scripts/verify_analysis.py
       - uses: actions/upload-artifact@v4
         with:
           name: gridproof-reports

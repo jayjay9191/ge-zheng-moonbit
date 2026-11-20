@@ -18,6 +18,15 @@ pub fn tile_counts(
   rows~ : Int32 = 2,
   columns~ : Int32 = 2,
 ) -> Array[TileCounts] raise AuditError {
+  // Public Audit values retain compare's size bounds before Int32 products.
+  if audit.width < 1 ||
+    audit.height < 1 ||
+    audit.width > 2048 ||
+    audit.height > 2048 {
+    raise Invalid(
+      "tile statistics require a window between 1 and 2048 pixels per side",
+    )
+  }
   if rows < 1 || columns < 1 || rows > audit.height || columns > audit.width {
     raise Invalid("tile rows and columns must fit the common window")
   }

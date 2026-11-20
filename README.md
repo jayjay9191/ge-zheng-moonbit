@@ -3,6 +3,24 @@
 
 在计算植被指数变化前，先检查两期栅格是否落在同一网格，再剔除云、阴影、雪、饱和和无数据像元。输出共同有效率、阈值上下的变化面积、逐像元差值以及排除原因。首版面向北向、30 米、同一 WGS84 UTM 分区的 Landsat 8/9 Collection 2 Level-2 裁片。
 
+## v0.1.1：先复跑新增分析
+
+阈值扫描、QA 配对影响和分块统计均由 MoonBit 计算，Python 只做独立复核与渲染。
+在仓库根目录执行：
+
+```sh
+moon run cmd/main -- data/feidong/scene-1.json data/feidong/scene-2.json 0.15 --sweep
+moon run cmd/main -- data/feidong/scene-1.json data/feidong/scene-2.json 0.15 --qa-impact
+moon run cmd/main -- data/feidong/scene-1.json data/feidong/scene-2.json 0.15 --tiles 2x2
+python scripts/verify_analysis.py
+```
+
+肥东三档阈值的 QA 后增/减分别为 155/1495、86/577、49/290；同阈值 0.15 下
+变化像元 3031 → 663，QA 新增排除 5120；分块各类合计与整窗一致。
+27 项测试通过，CI 同时实际执行上述分析 CLI。公共分块接口在乘法与数组访问前
+验证窗口尺寸，拒绝超出 2048×2048 的构造输入。算法公式与更多参数见下文。
+源码版本为 0.1.1；Mooncakes 新包尚待登录后发布，下方离线发行包仍为旧版 0.1.0。
+
 ## 肥东实测 · 一分钟演示
 
 以同为 30 米的两期 Landsat 9 影像比较 NDVI。使用 QA 波段后，有效像元从 **16,377** 降至 **11,257**，其中有 **2,368** 个原本超过变化阈值的像元被筛除。ArcGIS Pro 3.7.1 独立复算后，两个模式的分类、面积和 NoData 掩膜与 MoonBit 全部一致。

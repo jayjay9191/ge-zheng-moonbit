@@ -198,3 +198,18 @@ test "tiles reject summary-only results and unsupported class values" {
     is Err(_),
   )
 }
+
+///|
+test "tile audit rejects oversized public dimensions before wrapped multiplication" {
+  let a = test_chip(300000, 3500000, [10000], [0])
+  let invalid = {
+    ..compare(a, a, 0.15),
+    width: 65536,
+    height: 65536,
+    classes: [],
+  }
+  assert_true(
+    (Ok(tile_counts(invalid, rows=65536, columns=65536)) catch { e => Err(e) })
+    is Err(Invalid(_)),
+  )
+}
