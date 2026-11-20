@@ -105,11 +105,15 @@ def main():
     sources = [path for path in ROOT.glob("*.mbt")
                if not path.name.endswith(("_test.mbt", "_wbtest.mbt", "_data.mbt"))
                and "generated" not in path.name]
-    counts = {path.name: sum(bool(line.strip()) and not line.lstrip().startswith("//")
-                            for line in path.read_text(encoding="utf-8").splitlines())
-              for path in sources}
+    source_lines = {path.name: [line.strip() for line in path.read_text(encoding="utf-8").splitlines()
+                                if line.strip() and not line.lstrip().startswith("//")]
+                    for path in sorted(sources)}
+    counts = {name: sum(any(ch.isalnum() for ch in line) for line in lines)
+              for name, lines in source_lines.items()}
     assert sum(counts.values()) >= 500, counts
-    print(f"PASS library source gate: {sum(counts.values())} nonblank/noncomment lines; excludes CLI, tests and data")
+    nonblank = sum(map(len, source_lines.values()))
+    print(f"PASS library source gate: {nonblank} nonblank/noncomment lines; excludes CLI, tests and data")
+    print(f"PASS stricter source gate: {sum(counts.values())} lines after also dropping punctuation-only lines; {counts}")
     subprocess.run(["moon", "build", "--release", "--target", "js"], cwd=ROOT, check=True)
     expected = {
         "data": ([11446, 10703, 10013], [285, 94, 52], 14224, 2160, 11239, 10797),
