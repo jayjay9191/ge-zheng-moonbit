@@ -163,14 +163,24 @@ fn main {
       println(evidence.stringify())
       return
     }
-    let result = @audit.compare(
-      before,
-      after,
-      threshold,
-      screen_qa=!direct,
-      min_coverage=minimum,
-      pixel_grids=!summary,
-    )
+    let result = if tiles is Some(_) || regions is Some(_) {
+      @audit.compare_classification(
+        before,
+        after,
+        threshold,
+        screen_qa=!direct,
+        min_coverage=minimum,
+      )
+    } else {
+      @audit.compare(
+        before,
+        after,
+        threshold,
+        screen_qa=!direct,
+        min_coverage=minimum,
+        pixel_grids=!summary,
+      )
+    }
     if tiles is Some((rows, columns)) {
       println(
         @json.ToJson::to_json(@audit.tile_counts(result, rows~, columns~)).stringify(),

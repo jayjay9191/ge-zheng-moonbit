@@ -435,3 +435,37 @@ test "land-only regions cannot use water pixels to connect land changes" {
     is Err(_),
   )
 }
+
+///|
+test "classification-only comparison preserves tile and land region answers" {
+  let a = test_chip(300000, 3500000, [14000, 14000, 14000], [0, 0, 0])
+  let b = test_chip(300030, 3500000, [10000, 13000, 14000], [128, 8, 0])
+  for screen_qa in [true, false] {
+    let full = compare(a, b, 0.15, screen_qa~)
+    let compact = compare_classification(a, b, 0.15, screen_qa~)
+    assert_eq(compact.classes, full.classes)
+    assert_eq(compact.water_code, full.water_code)
+    assert_true(
+      compact.delta.is_empty() &&
+      compact.ndvi_before.is_empty() &&
+      compact.ndvi_after.is_empty(),
+    )
+    assert_true(
+      compact.before_reason.is_empty() && compact.after_reason.is_empty(),
+    )
+    assert_eq(
+      Json(tile_counts(compact, rows=1)).stringify(),
+      Json(tile_counts(full, rows=1)).stringify(),
+    )
+    assert_eq(
+      Json(change_regions(compact, land_only=true)).stringify(),
+      Json(change_regions(full, land_only=true)).stringify(),
+    )
+  }
+  assert_true(
+    (Ok(compare_classification(a, b, 0.15, min_coverage=0.6)) catch {
+      e => Err(e)
+    })
+    is Err(_),
+  )
+}

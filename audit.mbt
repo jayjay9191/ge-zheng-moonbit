@@ -253,6 +253,33 @@ pub fn compare(
   min_coverage~ : Double = 0.0,
   pixel_grids~ : Bool = true,
 ) -> Audit raise AuditError {
+  compare_retained(
+    a, b, threshold, screen_qa, min_coverage, pixel_grids, pixel_grids,
+  )
+}
+
+///|
+/// Keep the class and water flags required by tile and region statistics.
+pub fn compare_classification(
+  a : Chip,
+  b : Chip,
+  threshold : Double,
+  screen_qa~ : Bool = true,
+  min_coverage~ : Double = 0.0,
+) -> Audit raise AuditError {
+  compare_retained(a, b, threshold, screen_qa, min_coverage, true, false)
+}
+
+///|
+fn compare_retained(
+  a : Chip,
+  b : Chip,
+  threshold : Double,
+  screen_qa : Bool,
+  min_coverage : Double,
+  retain_labels : Bool,
+  retain_evidence : Bool,
+) -> Audit raise AuditError {
   validate_threshold(threshold)
   validate_coverage(min_coverage)
   let { dx, dy, col0, row0, col1, row1, } = common_window(a, b)
@@ -279,7 +306,7 @@ pub fn compare(
       let ib = (row - dy) * b.width + col - dx
       let (reason_a, before) = pixel(a, ia, screen_qa)
       let (reason_b, after) = pixel(b, ib, screen_qa)
-      if pixel_grids {
+      if retain_evidence {
         ndvi_before.push(if reason_a == 0 { Some(before) } else { None })
         ndvi_after.push(if reason_b == 0 { Some(after) } else { None })
         before_reason.push(reason_a)
@@ -288,23 +315,21 @@ pub fn compare(
       qa_a[reason_a] += 1
       qa_b[reason_b] += 1
       if reason_a != 0 || reason_b != 0 {
-        if pixel_grids {
+        if retain_labels {
           water_code.push(-1)
-        }
-        if pixel_grids {
           classes.push(-2)
         }
-        if pixel_grids {
+        if retain_evidence {
           delta.push(None)
         }
       } else {
         let water = water_state(a, ia, b, ib)
-        if pixel_grids {
+        if retain_labels {
           water_code.push(water)
         }
         water_counts[water] += 1
         let d = after - before
-        if pixel_grids {
+        if retain_evidence {
           delta.push(Some(d))
         }
         sum += d
@@ -313,27 +338,21 @@ pub fn compare(
           max_abs_delta = magnitude
         }
         let class = classify_change(d, threshold)
+        if retain_labels {
+          classes.push(class)
+        }
         if class == 1 {
           gain += 1
           if water == 0 {
             both_nonwater_gain += 1
-          }
-          if pixel_grids {
-            classes.push(1)
           }
         } else if class == -1 {
           loss += 1
           if water == 0 {
             both_nonwater_loss += 1
           }
-          if pixel_grids {
-            classes.push(-1)
-          }
         } else {
           stable += 1
-          if pixel_grids {
-            classes.push(0)
-          }
         }
       }
     }
