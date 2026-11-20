@@ -51,6 +51,18 @@ def verify_shifted():
                     verify(result, *chips, cutoff, screen_qa=not flags)
                     assert result["overlap"] == 6
                     assert row["counts"] == {key: result[key] for key in row["counts"]}
+        masked = dict(after, qa=[8] * len(after["qa"]))
+        Path(paths[1]).write_text(json.dumps(masked), encoding="utf-8")
+        impact = run_pair(paths, "--qa-impact", threshold="0.1")
+        raw = run_pair(paths, "--direct", threshold="0.1")
+        verify(raw, before, masked, 0.1, screen_qa=False)
+        assert impact["screened"] == dict(gain=0, loss=0, stable=0, valid=0, excluded=6)
+        assert impact["unscreened"] == {key: raw[key] for key in impact["unscreened"]}
+        assert impact["qa_added_exclusions"] == raw["valid"]
+        assert "没有共同有效像元" in impact["conclusion"]
+        run_pair(paths, "--qa-impact", "--min-coverage", "0.01", success=False, threshold="0.1")
+        run_pair(paths, "--summary", success=False, threshold="0.1")
+        print("PASS QA impact reports fully masked windows; coverage floor and change classification still reject")
     print("PASS shifted 3x2 window in both directions, QA modes and threshold order")
 
 

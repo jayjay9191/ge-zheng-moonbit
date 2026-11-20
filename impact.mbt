@@ -21,19 +21,17 @@ pub fn qa_impact(
   threshold : Double,
   min_coverage~ : Double = 0.0,
 ) -> QualityImpact raise AuditError {
-  let screened = change_counts(
-    compare(before, after, threshold, min_coverage~, pixel_grids=false),
-  )
-  let unscreened = change_counts(
-    compare(
-      before,
-      after,
-      threshold,
-      screen_qa=false,
-      min_coverage~,
-      pixel_grids=false,
-    ),
-  )
+  validate_threshold(threshold)
+  validate_coverage(min_coverage)
+  let window = common_window(before, after)
+  let thresholds = [threshold]
+  let unscreened = count_thresholds(before, after, window, thresholds, false)[0].counts
+  let overlap = unscreened.valid + unscreened.excluded
+  ignore(shared_coverage(unscreened.valid, overlap, min_coverage))
+  let screened = count_thresholds(before, after, window, thresholds, true)[0].counts
+  if screened.valid != 0 || min_coverage > 0.0 {
+    ignore(shared_coverage(screened.valid, overlap, min_coverage))
+  }
   let changed_before = unscreened.gain + unscreened.loss
   let changed_after = screened.gain + screened.loss
   let qa_added_exclusions = screened.excluded - unscreened.excluded
@@ -47,6 +45,10 @@ pub fn qa_impact(
     changed_before,
     changed_after,
     changed_removed: changed_before - changed_after,
-    conclusion: "QA新增排除\{qa_added_exclusions}像元，达阈值像元\{changed_before} → \{changed_after}；变化属于质检影响，须结合现场与源影像解释。",
+    conclusion: if screened.valid == 0 {
+      "QA筛选后没有共同有效像元。筛选前达阈值 \{changed_before} 像元，不能据此推断实际变化。"
+    } else {
+      "QA新增排除\{qa_added_exclusions}像元，达阈值像元\{changed_before} → \{changed_after}；变化属于质检影响，须结合现场与源影像解释。"
+    },
   }
 }

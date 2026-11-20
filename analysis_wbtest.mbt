@@ -311,3 +311,26 @@ test "pixel evidence verifies both NDVI readings and water state" {
     assert_true(result is Err(Invalid(_)))
   }
 }
+
+///|
+test "QA impact reports when screening removes every usable pixel" {
+  let a = test_chip(300000, 3500000, [14000, 14000], [0, 0])
+  let b = { ..a, red: [10000, 14000], qa: [8, 8], }
+  let impact = qa_impact(a, b, 0.15)
+  assert_eq([impact.screened.valid, impact.unscreened.valid], [0, 2])
+  assert_eq(
+    [impact.changed_before, impact.changed_after, impact.qa_added_exclusions],
+    [1, 0, 2],
+  )
+  assert_true(
+    (Ok(qa_impact(a, b, 0.15, min_coverage=0.01)) catch { e => Err(e) })
+    is Err(Invalid(_)),
+  )
+  assert_true(
+    (Ok(compare(a, b, 0.15)) catch { e => Err(e) }) is Err(Invalid(_)),
+  )
+  let bad = { ..b, red: [0, 0], }
+  assert_true(
+    (Ok(qa_impact(a, bad, 0.15)) catch { e => Err(e) }) is Err(Invalid(_)),
+  )
+}

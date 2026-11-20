@@ -9,17 +9,6 @@ pub(all) struct ChangeCounts {
 }
 
 ///|
-fn change_counts(audit : Audit) -> ChangeCounts {
-  {
-    gain: audit.gain,
-    loss: audit.loss,
-    stable: audit.stable,
-    valid: audit.valid,
-    excluded: audit.excluded,
-  }
-}
-
-///|
 #derive(ToJson)
 pub(all) struct ThresholdCounts {
   threshold : Double
@@ -68,7 +57,38 @@ pub fn sensitivity(
     validate_threshold(threshold)
   }
   validate_coverage(min_coverage)
-  let { dx, dy, col0, row0, col1, row1, } = common_window(before, after)
+  let window = common_window(before, after)
+  let rows = count_thresholds(before, after, window, thresholds, screen_qa)
+  let counts = rows[0].counts
+  ignore(
+    shared_coverage(counts.valid, counts.valid + counts.excluded, min_coverage),
+  )
+  let gain_relative_range = relative_range(rows.map(row => row.counts.gain))
+  let loss_relative_range = relative_range(rows.map(row => row.counts.loss))
+  let sensitive = gain_relative_range > 0.5 || loss_relative_range > 0.5
+  {
+    rows,
+    gain_relative_range,
+    loss_relative_range,
+    sensitive,
+    conclusion: if sensitive {
+      "阈值敏感，须报告各档结果"
+    } else {
+      "在本次阈值集合内稳健"
+    },
+  }
+}
+
+///|
+// Count-only comparisons can represent an empty window after screening.
+fn count_thresholds(
+  before : Chip,
+  after : Chip,
+  window : CommonWindow,
+  thresholds : Array[Double],
+  screen_qa : Bool,
+) -> Array[ThresholdCounts] {
+  let { dx, dy, col0, row0, col1, row1, } = window
   let gains = Array::make(thresholds.length(), 0)
   let losses = Array::make(thresholds.length(), 0)
   let mut valid = 0
@@ -95,8 +115,7 @@ pub fn sensitivity(
     }
   }
   let overlap = (row1 - row0) * (col1 - col0)
-  ignore(shared_coverage(valid, overlap, min_coverage))
-  let rows = Array::makei(thresholds.length(), i => {
+  Array::makei(thresholds.length(), i => {
     let gain = gains[i]
     let loss = losses[i]
     {
@@ -110,18 +129,4 @@ pub fn sensitivity(
       },
     }
   })
-  let gain_relative_range = relative_range(rows.map(row => row.counts.gain))
-  let loss_relative_range = relative_range(rows.map(row => row.counts.loss))
-  let sensitive = gain_relative_range > 0.5 || loss_relative_range > 0.5
-  {
-    rows,
-    gain_relative_range,
-    loss_relative_range,
-    sensitive,
-    conclusion: if sensitive {
-      "阈值敏感，须报告各档结果"
-    } else {
-      "在本次阈值集合内稳健"
-    },
-  }
 }
