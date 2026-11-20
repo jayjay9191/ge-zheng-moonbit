@@ -13,6 +13,12 @@ pub fn inspect_pixel(Chip, Chip, Audit, Int32, Int32) -> PixelEvidence raise Aud
 
 pub fn parse_chip(String) -> Chip raise
 
+pub fn qa_impact(Chip, Chip, Double, min_coverage? : Double) -> QualityImpact raise AuditError
+
+pub fn sensitivity(Chip, Chip, Array[Double], screen_qa? : Bool, min_coverage? : Double) -> Sensitivity raise AuditError
+
+pub fn tile_counts(Audit, rows? : Int32, columns? : Int32) -> Array[TileCounts] raise AuditError
+
 // Errors
 #derive(@debug.Debug)
 pub suberror AuditError {
@@ -61,6 +67,16 @@ pub(all) struct Audit {
   ndvi_before : Array[Double?]
   ndvi_after : Array[Double?]
 }
+pub fn Audit::to_json(Self) -> @json.Json
+
+#derive(@json.ToJson)
+pub(all) struct ChangeCounts {
+  gain : Int32
+  loss : Int32
+  stable : Int32
+  valid : Int32
+  excluded : Int32
+}
 
 #derive(@json.FromJson)
 pub(all) struct Chip {
@@ -77,6 +93,7 @@ pub(all) struct Chip {
   qa : Array[Int32]
   saturation : Array[Int32]
 }
+pub fn Chip::from_json(@json.Json, @json.DecodeContext) -> Self raise @json.JsonDecodeError
 
 #derive(@json.ToJson)
 pub(all) struct PixelEvidence {
@@ -95,6 +112,7 @@ pub(all) struct PixelEvidence {
   class_code : Int32
   delta : Double?
 }
+pub fn PixelEvidence::to_json(Self) -> @json.Json
 
 #derive(@json.ToJson)
 pub(all) struct Quality {
@@ -104,6 +122,47 @@ pub(all) struct Quality {
   snow : Int32
   saturated : Int32
   unusable_signal : Int32
+}
+pub fn Quality::to_json(Self) -> @json.Json
+
+#derive(@json.ToJson)
+pub(all) struct QualityImpact {
+  threshold : Double
+  screened : ChangeCounts
+  unscreened : ChangeCounts
+  qa_added_exclusions : Int32
+  gain_removed : Int32
+  loss_removed : Int32
+  changed_before : Int32
+  changed_after : Int32
+  changed_removed : Int32
+  conclusion : String
+}
+
+#derive(@json.ToJson)
+pub(all) struct Sensitivity {
+  rows : Array[ThresholdCounts]
+  gain_relative_range : Double
+  loss_relative_range : Double
+  sensitive : Bool
+  conclusion : String
+}
+
+#derive(@json.ToJson)
+pub(all) struct ThresholdCounts {
+  threshold : Double
+  counts : ChangeCounts
+}
+
+#derive(@json.ToJson)
+pub(all) struct TileCounts {
+  row : Int32
+  column : Int32
+  row_start : Int32
+  column_start : Int32
+  height : Int32
+  width : Int32
+  counts : ChangeCounts
 }
 
 // Type aliases

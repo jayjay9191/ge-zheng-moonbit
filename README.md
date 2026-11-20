@@ -114,3 +114,20 @@ python scripts/export_geotiff.py results/feidong/screened.json results/feidong/g
 ```
 
 在 **ArcGIS Pro 自带的 Python 环境**中从仓库根目录运行 `python scripts/verify_arcgis.py`。脚本将裁片的 B4、B5 和两组 QA 原值写入带地理参考的 GeoTIFF，用 ArcPy 读取后独立计算 NDVI，再对比 MoonBit 的逐像元分类与导出栅格。输出位于 `results/feidong/arcgis`，包括验证 JSON 和可加载到 GIS 的图层。第 10 行第 14 列因第一期标云被剔除，第 11 行第 43 列保留（ΔNDVI +0.180065）。
+# 三项原生分析（0.1.1）
+
+对同一对芯片运行以下命令，分析由 MoonBit 完成。输出 JSON 可直接用于复核。
+
+```sh
+moon run cmd/main -- data/feidong/scene-1.json data/feidong/scene-2.json 0.15 --sweep
+moon run cmd/main -- data/feidong/scene-1.json data/feidong/scene-2.json 0.15 --sweep 0.10,0.15,0.20
+moon run cmd/main -- data/feidong/scene-1.json data/feidong/scene-2.json 0.15 --qa-impact
+moon run cmd/main -- data/feidong/scene-1.json data/feidong/scene-2.json 0.15 --tiles 2x2
+python scripts/verify_analysis.py
+```
+
+阈值扫描报告每档 gain、loss、stable、valid、excluded。敏感性分别取 gain 和 loss 的 `(最大值-最小值)/最大值`，全零时取零，任一值严格超过 50% 即提示敏感。它只描述本次阈值集合的波动。空列表、非有限值及超出 `(0,2]` 的阈值均拒绝。
+
+质检配对固定源数据和阈值，同时报告筛选前后计数及差值。肥东达阈值像元为 3031→663，QA 新增排除 5120，直接模式仍有 7 个信号无效像元。排除影响需要结合源影像解释。
+
+分块按公共窗口分类数组统计，默认 2×2，支持非整除分块。`row_start`、`column_start` 为零基公共窗口偏移，块标签从 1 开始。四类编码分别为排除、loss、stable、gain，每个像元恰好归入一块。块数不得超过公共窗口尺寸。扫描、配对、分块、单像元和简要输出模式互斥。

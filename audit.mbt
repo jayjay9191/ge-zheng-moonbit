@@ -16,6 +16,9 @@ pub(all) struct Chip {
 }
 
 ///|
+pub extend Chip with @json.FromJson::{from_json}
+
+///|
 /// Decode one chip and reject ambiguous JSON objects with duplicate band keys.
 pub fn parse_chip(raw : String) -> Chip raise {
   @json.from_json(@json.parse(raw, reject_duplicate_keys=true))
@@ -74,6 +77,12 @@ pub(all) struct Audit {
   ndvi_before : Array[Double?]
   ndvi_after : Array[Double?]
 }
+
+///|
+pub extend Quality with @json.ToJson::{to_json}
+
+///|
+pub extend Audit with @json.ToJson::{to_json}
 
 ///|
 #derive(Debug)
@@ -341,6 +350,9 @@ pub(all) struct PixelEvidence {
   class_code : Int32
   delta : Double?
 }
+
+///|
+pub extend PixelEvidence with @json.ToJson::{to_json}
 
 ///|
 /// row and column are one-based indexes within the common window.
