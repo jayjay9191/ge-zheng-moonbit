@@ -469,3 +469,49 @@ test "classification-only comparison preserves tile and land region answers" {
     is Err(_),
   )
 }
+
+///|
+test "NDVI transition matrices transpose across reversed Landsat scenes" {
+  let (a, b) = analysis_pair(true)
+  let bins = [0.0, 0.3, 0.6]
+  let forward = ndvi_transitions(a, b, bins)
+  let reverse = ndvi_transitions(b, a, bins)
+  assert_eq(forward.valid, 11257)
+  assert_eq(forward.excluded, 5127)
+  assert_eq(forward.counts.length(), 4)
+  assert_eq(
+    forward.counts.fold(init=0, (sum, row) => {
+      sum + row.fold(init=0, (n, x) => n + x)
+    }),
+    forward.valid,
+  )
+  for i in 0..<4 {
+    for j in 0..<4 {
+      assert_eq(forward.counts[i][j], reverse.counts[j][i])
+    }
+  }
+  assert_eq(ndvi_transitions(a, b, bins, screen_qa=false).valid, 16377)
+}
+
+///|
+test "NDVI transitions apply exact bin boundaries and reject invalid cut points" {
+  let (a, _) = analysis_pair(true)
+  let chip = {
+    ..a,
+    width: 1,
+    height: 1,
+    red: [20000],
+    nir: [20000],
+    qa: [0],
+    saturation: [0],
+  }
+  assert_eq(ndvi_transitions(chip, chip, [0.0]).counts, [[0, 0], [0, 1]])
+  for cut in [[], [0.3, 0.3], [0.4, 0.2], [-1.0], [1.0]] {
+    let result = Ok(ndvi_transitions(chip, chip, cut)) catch { err => Err(err) }
+    assert_true(result is Err(_))
+  }
+  let coverage = Ok(ndvi_transitions(a, a, [0.0], min_coverage=1.0)) catch {
+    err => Err(err)
+  }
+  assert_true(coverage is Err(_))
+}

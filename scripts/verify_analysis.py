@@ -1,11 +1,13 @@
 """Check the real built CLI against both measured Landsat windows."""
+from bisect import bisect_right
 from collections import Counter
+from fractions import Fraction
 import json
 from pathlib import Path
 import subprocess
 from tempfile import TemporaryDirectory
 
-from replay import verify
+from replay import locations, reference as reference_pixel, verify
 from source_manifest import load_pair
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -138,7 +140,24 @@ def main():
     max_error = 0.0
     for folder, (gains, losses, valid, excluded, changed_before, changed_after) in expected.items():
         sweep = run(folder, "--sweep")
-        _, (before, after) = load_pair(ROOT, ROOT / folder / "sources.json")
+        paths, (before, after) = load_pair(ROOT, ROOT / folder / "sources.json")
+        cuts = [Fraction("0.2"), Fraction("0.5")]
+        first, second = locations(before), locations(after)
+        for flags in ((), ("--direct",)):
+            expected_transitions = [[0] * 3 for _ in range(3)]
+            common = first.keys() & second.keys()
+            for point in common:
+                a, b = (reference_pixel(chip, index, screen_qa=not flags)
+                        for chip, index in ((before, first[point]), (after, second[point])))
+                if a is not None and b is not None:
+                    expected_transitions[bisect_right(cuts, a)][bisect_right(cuts, b)] += 1
+            transitions = run_pair(paths, "0.2,0.5", *flags, threshold="--transitions")
+            assert transitions["cut_points"] == [0.2, 0.5]
+            assert transitions["counts"] == expected_transitions
+            assert transitions["valid"] == sum(map(sum, expected_transitions))
+            assert transitions["valid"] + transitions["excluded"] == len(common)
+            if not flags:
+                print(f"PASS {folder} NDVI transitions: {expected_transitions}")
         assert len(sweep["rows"]) == 3
         for i, cutoff in enumerate((0.1, 0.15, 0.2)):
             row = sweep["rows"][i]

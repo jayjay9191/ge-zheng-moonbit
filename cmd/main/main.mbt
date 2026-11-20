@@ -20,14 +20,19 @@ fn main {
   let start = if args.length() > 2 && args[2] == "--" { 3 } else { 2 }
   if args.length() < start + 3 {
     println(
-      "Usage: moon run cmd/main -- <before.json> <after.json> <NDVI threshold> [--direct] [--min-coverage <fraction>] [--inspect <row> <column> | --summary | --sweep [0.10,0.15,0.20] | --qa-impact | --tiles 2x2 | --regions [4|8] [--min-region-pixels <pixels>] [--land-only]]",
+      "Usage: moon run cmd/main -- <before.json> <after.json> <NDVI threshold | --transitions <cuts>] [--direct] [--min-coverage <fraction>] [--inspect <row> <column> | --summary | --sweep [0.10,0.15,0.20] | --qa-impact | --tiles 2x2 | --regions [4|8] [--min-region-pixels <pixels>] [--land-only]]",
     )
     @env.exit(2)
   }
   try {
     let before = load_chip(args[start])
     let after = load_chip(args[start + 1])
-    let threshold : Double = @json.from_json(@json.parse(args[start + 2]))
+    let transition_mode = args[start + 2] == "--transitions"
+    let threshold : Double = if transition_mode {
+      0.15
+    } else {
+      @json.from_json(@json.parse(args[start + 2]))
+    }
     @audit.validate_threshold(threshold)
     let mut direct = false
     let mut minimum = 0.0
@@ -39,7 +44,8 @@ fn main {
     let mut region_min : Int32? = None
     let mut land_only = false
     let mut tiles : (Int32, Int32)? = None
-    let mut index = start + 3
+    let mut transition : Array[Double]? = None
+    let mut index = start + (if transition_mode { 2 } else { 3 })
     let seen : Map[String, Bool] = Map([])
     while index < args.length() {
       let flag = args[index]
@@ -77,6 +83,17 @@ fn main {
             fail("--min-region-pixels requires a positive integer")
           }
           region_min = Some(@json.from_json(@json.parse(args[index])))
+        }
+        "--transitions" => {
+          index += 1
+          if index >= args.length() {
+            fail("--transitions requires comma-separated NDVI cut points")
+          }
+          let cuts : Array[Double] = []
+          for value in args[index].split(",") {
+            cuts.push(@json.from_json(@json.parse(value.to_owned())))
+          }
+          transition = Some(cuts)
         }
         "--tiles" => {
           index += 1
@@ -121,10 +138,11 @@ fn main {
       impact,
       tiles is Some(_),
       regions is Some(_),
+      transition is Some(_),
     ]
     if modes.filter(value => value).length() > 1 {
       fail(
-        "choose only one of --summary, --inspect, --sweep, --qa-impact, --tiles and --regions",
+        "choose only one of --summary, --inspect, --sweep, --qa-impact, --tiles, --regions and --transitions",
       )
     }
     if (region_min is Some(_) || land_only) && regions is None {
@@ -132,6 +150,17 @@ fn main {
     }
     if impact && direct {
       fail("--qa-impact compares both QA policies; do not also select --direct")
+    }
+    if transition is Some(cuts) {
+      let result = @audit.ndvi_transitions(
+        before,
+        after,
+        cuts,
+        screen_qa=!direct,
+        min_coverage=minimum,
+      )
+      println(@json.ToJson::to_json(result).stringify())
+      return
     }
     if sweep is Some(thresholds) {
       let result = @audit.sensitivity(

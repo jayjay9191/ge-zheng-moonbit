@@ -17,6 +17,8 @@ pub fn inspect_pixel(Chip, Chip, Audit, Int32, Int32) -> PixelEvidence raise Aud
 
 pub fn inspect_sources(Chip, Chip, Double, Int32, Int32, screen_qa? : Bool, min_coverage? : Double) -> PixelEvidence raise AuditError
 
+pub fn ndvi_transitions(Chip, Chip, Array[Double], screen_qa? : Bool, min_coverage? : Double) -> NdviTransitions raise AuditError
+
 pub fn parse_chip(String) -> Chip raise
 
 pub fn qa_impact(Chip, Chip, Double, min_coverage? : Double) -> QualityImpact raise AuditError
@@ -111,6 +113,15 @@ pub(all) struct Chip {
   saturation : Array[Int32]
 }
 pub fn Chip::from_json(@json.Json, @json.DecodeContext) -> Self raise @json.JsonDecodeError
+
+#derive(@json.ToJson)
+pub(all) struct NdviTransitions {
+  cut_points : Array[Double]
+  counts : Array[Array[Int32]]
+  valid : Int32
+  excluded : Int32
+}
+pub fn NdviTransitions::to_json(Self) -> @json.Json
 
 #derive(@json.ToJson)
 pub(all) struct PixelEvidence {
