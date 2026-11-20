@@ -34,6 +34,7 @@ pub fn tile_counts(
     raise Invalid("tile statistics require the complete classification grid")
   }
   let tiles = []
+  let totals = Array::make(4, 0)
   for row in 0..<rows {
     let row_start = row * audit.height / rows
     let row_end = (row + 1) * audit.height / rows
@@ -48,6 +49,7 @@ pub fn tile_counts(
             raise Invalid("classification grid contains an unsupported class")
           }
           counts[code + 2] += 1
+          totals[code + 2] += 1
         }
       }
       tiles.push({
@@ -66,6 +68,17 @@ pub fn tile_counts(
         },
       })
     }
+  }
+  if audit.overlap != audit.width * audit.height ||
+    [audit.excluded, audit.loss, audit.stable, audit.gain, audit.valid] !=
+    [
+      totals[0],
+      totals[1],
+      totals[2],
+      totals[3],
+      totals[1] + totals[2] + totals[3],
+    ] {
+    raise Invalid("classification grid disagrees with whole-window counts")
   }
   tiles
 }

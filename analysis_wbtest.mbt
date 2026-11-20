@@ -261,3 +261,25 @@ test "pixel evidence rejects mixed sources truncated grids and altered classific
     assert_eq(inspect_pixel(before, after, valid, 1, 1).class_code, code)
   }
 }
+
+///|
+test "tile counts cannot silently contradict the whole-window totals" {
+  let a = test_chip(300000, 3500000, [10000], [0])
+  let result = compare(a, a, 0.15)
+  for
+    invalid in [
+      { ..result, gain: 1, },
+      { ..result, loss: 1, },
+      { ..result, stable: 0, },
+      { ..result, valid: 0, },
+      { ..result, excluded: 1, },
+      { ..result, overlap: 2, },
+    ] {
+    assert_true(
+      (Ok(tile_counts(invalid, rows=1, columns=1)) catch { e => Err(e) })
+      is Err(Invalid(_)),
+    )
+  }
+  assert_eq(tile_counts(result, rows=1, columns=1)[0].counts.stable, 1)
+  assert_eq(result.classes, [0])
+}
