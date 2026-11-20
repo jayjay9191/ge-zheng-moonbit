@@ -126,6 +126,12 @@ test "QA impact distinguishes reflectance exclusions from QA exclusions" {
 test "QA impact validates thresholds and shared coverage" {
   let a = test_chip(300000, 3500000, [10000, 10000], [0, 8])
   assert_true((Ok(qa_impact(a, a, 0.0)) catch { e => Err(e) }) is Err(_))
+  for minimum in [-0.1, 1.1] {
+    assert_true(
+      (Ok(qa_impact(a, a, 0.15, min_coverage=minimum)) catch { e => Err(e) })
+      is Err(Invalid(_)),
+    )
+  }
   assert_true(
     (Ok(qa_impact(a, a, 0.15, min_coverage=0.6)) catch { e => Err(e) })
     is Err(_),
@@ -212,4 +218,46 @@ test "tile audit rejects oversized public dimensions before wrapped multiplicati
     (Ok(tile_counts(invalid, rows=65536, columns=65536)) catch { e => Err(e) })
     is Err(Invalid(_)),
   )
+}
+
+///|
+test "pixel evidence rejects mixed sources truncated grids and altered classifications" {
+  let a = test_chip(300000, 3500000, [10000], [0])
+  let result = compare(a, a, 0.15)
+  assert_true(
+    (Ok(inspect_pixel({ ..a, cell: 0, }, a, result, 1, 1)) catch {
+      e => Err(e)
+    })
+    is Err(Invalid(_)),
+  )
+  assert_true(
+    (Ok(inspect_pixel({ ..a, scene: "unrelated", }, a, result, 1, 1)) catch {
+      e => Err(e)
+    })
+    is Err(Invalid(_)),
+  )
+  assert_true(
+    (Ok(inspect_pixel({ ..a, qa: [8], }, a, result, 1, 1)) catch {
+      e => Err(e)
+    })
+    is Err(Invalid(_)),
+  )
+  for
+    bad in [
+      { ..result, before_reason: [], },
+      { ..result, delta: [], },
+      { ..result, classes: [1], },
+      { ..result, x: result.x + 1, },
+      { ..result, threshold: 0.0, },
+    ] {
+    assert_true(
+      (Ok(inspect_pixel(a, a, bad, 1, 1)) catch { e => Err(e) })
+      is Err(Invalid(_)),
+    )
+  }
+  let changed = test_chip(300000, 3500000, [18000], [0])
+  for (before, after, code) in [(a, changed, -1), (changed, a, 1)] {
+    let valid = compare(before, after, 0.15)
+    assert_eq(inspect_pixel(before, after, valid, 1, 1).class_code, code)
+  }
 }

@@ -19,6 +19,8 @@ pub fn sensitivity(Chip, Chip, Array[Double], screen_qa? : Bool, min_coverage? :
 
 pub fn tile_counts(Audit, rows? : Int32, columns? : Int32) -> Array[TileCounts] raise AuditError
 
+pub fn validate_threshold(Double) -> Unit raise AuditError
+
 // Errors
 #derive(@debug.Debug)
 pub suberror AuditError {

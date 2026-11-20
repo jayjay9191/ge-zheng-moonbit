@@ -28,6 +28,7 @@ fn main {
     let before = load_chip(args[start])
     let after = load_chip(args[start + 1])
     let threshold : Double = @json.from_json(@json.parse(args[start + 2]))
+    @audit.validate_threshold(threshold)
     let mut direct = false
     let mut minimum = 0.0
     let mut summary = false

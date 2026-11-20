@@ -161,6 +161,24 @@ fn quality(counts : Array[Int32]) -> Quality {
 }
 
 ///|
+fn classify_change(delta : Double, threshold : Double) -> Int32 {
+  if delta >= threshold {
+    1
+  } else if delta <= -threshold {
+    -1
+  } else {
+    0
+  }
+}
+
+///|
+pub fn validate_threshold(threshold : Double) -> Unit raise AuditError {
+  if !(threshold > 0.0 && threshold <= 2.0) {
+    raise Invalid("NDVI threshold must be between 0 (exclusive) and 2")
+  }
+}
+
+///|
 pub fn compare(
   a : Chip,
   b : Chip,
@@ -171,9 +189,7 @@ pub fn compare(
 ) -> Audit raise AuditError {
   validate(a)
   validate(b)
-  if !(threshold > 0.0 && threshold <= 2.0) {
-    raise Invalid("NDVI threshold must be between 0 (exclusive) and 2")
-  }
+  validate_threshold(threshold)
   if !(min_coverage >= 0.0 && min_coverage <= 1.0) {
     raise Invalid("minimum coverage must be in [0, 1]")
   }
@@ -252,7 +268,8 @@ pub fn compare(
         if magnitude > max_abs_delta {
           max_abs_delta = magnitude
         }
-        if d >= threshold {
+        let class = classify_change(d, threshold)
+        if class == 1 {
           gain += 1
           if water == 0 {
             both_nonwater_gain += 1
@@ -260,7 +277,7 @@ pub fn compare(
           if pixel_grids {
             classes.push(1)
           }
-        } else if d <= -threshold {
+        } else if class == -1 {
           loss += 1
           if water == 0 {
             both_nonwater_loss += 1
@@ -363,8 +380,40 @@ pub fn inspect_pixel(
   row : Int32,
   column : Int32,
 ) -> PixelEvidence raise AuditError {
-  if result.classes.is_empty() {
-    raise Invalid("pixel evidence requires a result with pixel grids")
+  validate(a)
+  validate(b)
+  validate_threshold(result.threshold)
+  if result.first_scene != a.scene ||
+    result.second_scene != b.scene ||
+    result.first_date != a.date ||
+    result.second_date != b.date ||
+    result.epsg != a.epsg ||
+    result.epsg != b.epsg ||
+    result.cell != 30 ||
+    result.width < 1 ||
+    result.width > 2048 ||
+    result.height < 1 ||
+    result.height > 2048 {
+    raise Invalid("pixel evidence sources or audit metadata do not match")
+  }
+  let size = result.width * result.height
+  if result.before_reason.length() != size ||
+    result.after_reason.length() != size ||
+    result.delta.length() != size ||
+    result.classes.length() != size {
+    raise Invalid("pixel evidence requires complete result grids")
+  }
+  for chip in [a, b] {
+    let east = result.x - chip.x
+    let south = chip.y - result.y
+    if east < 0 ||
+      south < 0 ||
+      east % 30 != 0 ||
+      south % 30 != 0 ||
+      east / 30 + result.width > chip.width ||
+      south / 30 + result.height > chip.height {
+      raise Invalid("pixel evidence window is not aligned within both sources")
+    }
   }
   if row < 1 || row > result.height || column < 1 || column > result.width {
     raise Invalid("pixel is outside the common grid")
@@ -374,6 +423,25 @@ pub fn inspect_pixel(
   let ia = (a.y - y) / a.cell * a.width + (x - a.x) / a.cell
   let ib = (b.y - y) / b.cell * b.width + (x - b.x) / b.cell
   let i = (row - 1) * result.width + column - 1
+  let (reason_a, before) = pixel(a, ia, result.qa_screened)
+  let (reason_b, after) = pixel(b, ib, result.qa_screened)
+  let expected_delta = if reason_a == 0 && reason_b == 0 {
+    Some(after - before)
+  } else {
+    None
+  }
+  let expected_class = match expected_delta {
+    Some(d) => classify_change(d, result.threshold)
+    None => -2
+  }
+  if result.before_reason[i] != reason_a ||
+    result.after_reason[i] != reason_b ||
+    result.delta[i] != expected_delta ||
+    result.classes[i] != expected_class {
+    raise Invalid(
+      "pixel evidence disagrees with source QA or NDVI classification",
+    )
+  }
   {
     x_center: x + result.cell / 2,
     y_center: y - result.cell / 2,

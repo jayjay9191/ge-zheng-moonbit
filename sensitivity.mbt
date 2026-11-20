@@ -65,9 +65,7 @@ pub fn sensitivity(
     raise Invalid("threshold sweep requires at least one threshold")
   }
   for threshold in thresholds {
-    if !(threshold > 0.0 && threshold <= 2.0) {
-      raise Invalid("NDVI threshold must be between 0 (exclusive) and 2")
-    }
+    validate_threshold(threshold)
   }
   let rows : Array[ThresholdCounts] = []
   for threshold in thresholds {

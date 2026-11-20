@@ -7,9 +7,9 @@ ROOT = Path(__file__).resolve().parents[1]
 PROGRAM = ROOT / "_build/js/release/build/cmd/main/main.js"
 
 
-def run(folder, *flags, success=True):
+def run(folder, *flags, success=True, threshold="0.15"):
     result = subprocess.run(
-        ["node", str(PROGRAM), f"{folder}/scene-1.json", f"{folder}/scene-2.json", "0.15", *flags],
+        ["node", str(PROGRAM), f"{folder}/scene-1.json", f"{folder}/scene-2.json", threshold, *flags],
         cwd=ROOT, capture_output=True, text=True, encoding="utf-8", timeout=30,
     )
     assert result.returncode == (0 if success else 2), result.stdout + result.stderr
@@ -50,6 +50,8 @@ def main():
                   ("--tiles", "129x2"), ("--sweep", "--qa-impact"),
                   ("--qa-impact", "--direct"), ("--sweep", "--summary")):
         run("data", *flags, success=False)
+    for threshold in ("0", "-0.1", "2.01"):
+        run("data", "--sweep", threshold=threshold, success=False)
     print("PASS invalid thresholds, dimensions and conflicting CLI modes")
 
 
