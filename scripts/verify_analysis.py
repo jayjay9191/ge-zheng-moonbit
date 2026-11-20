@@ -17,6 +17,14 @@ def run(folder, *flags, success=True):
 
 
 def main():
+    sources = [path for path in ROOT.glob("*.mbt")
+               if not path.name.endswith(("_test.mbt", "_wbtest.mbt", "_data.mbt"))
+               and "generated" not in path.name]
+    counts = {path.name: sum(bool(line.strip()) and not line.lstrip().startswith("//")
+                            for line in path.read_text(encoding="utf-8").splitlines())
+              for path in sources}
+    assert sum(counts.values()) >= 500, counts
+    print(f"PASS library source gate: {sum(counts.values())} nonblank/noncomment lines; excludes CLI, tests and data")
     subprocess.run(["moon", "build", "--release", "--target", "js"], cwd=ROOT, check=True)
     expected = {
         "data": ([11446, 10703, 10013], [285, 94, 52], 14224, 2160, 11239, 10797),

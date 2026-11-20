@@ -21,6 +21,12 @@ python scripts/verify_analysis.py
 验证窗口尺寸，拒绝超出 2048×2048 的构造输入。算法公式与更多参数见下文。
 源码版本为 0.1.1；Mooncakes 新包尚待登录后发布，下方离线发行包仍为旧版 0.1.0。
 
+初审核对入口：[`sensitivity.mbt`](sensitivity.mbt) 做同源多阈值比较，
+[`impact.mbt`](impact.mbt) 做质检配对，[`tiles.mbt`](tiles.mbt) 做空间分块；
+[`analysis_wbtest.mbt`](analysis_wbtest.mbt) 给出真实样窗与错误输入断言。
+`verify_analysis.py` 在 CI 中实际复跑这些 CLI，并独立列出排除测试、生成数据和 CLI
+后的有效源码行数（去空行与行首注释）。此门槛只证明这个计数口径，不代替评审对有效代码的认定。
+
 ## 肥东实测 · 一分钟演示
 
 以同为 30 米的两期 Landsat 9 影像比较 NDVI。使用 QA 波段后，有效像元从 **16,377** 降至 **11,257**，其中有 **2,368** 个原本超过变化阈值的像元被筛除。ArcGIS Pro 3.7.1 独立复算后，两个模式的分类、面积和 NoData 掩膜与 MoonBit 全部一致。
