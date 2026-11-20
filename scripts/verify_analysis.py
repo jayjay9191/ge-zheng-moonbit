@@ -157,6 +157,14 @@ def main():
                         expected_land[row][column] += 1
             transitions = run_pair(paths, "0.2,0.5", *flags, threshold="--transitions")
             assert transitions["cut_points"] == [0.2, 0.5]
+            assert transitions["qa_screened"] is (not flags)
+            assert transitions["land_only"] is False
+            assert transitions["sources"] == {
+                "first_scene": before["scene"], "second_scene": after["scene"],
+                "first_date": before["date"], "second_date": after["date"],
+                "epsg": before["epsg"],
+            }
+            assert abs(transitions["valid_fraction"] - transitions["valid"] / len(common)) < 1e-15
             assert transitions["counts"] == expected_transitions
             summary = transitions["summary"]
             assert summary == {
@@ -170,6 +178,8 @@ def main():
             assert transitions["valid"] + transitions["excluded"] == len(common)
             land = run_pair(paths, "0.2,0.5", "--land-only", *flags, threshold="--transitions")
             assert land["counts"] == expected_land
+            assert land["land_only"] is True and land["qa_screened"] is (not flags)
+            assert abs(land["valid_fraction"] - land["valid"] / len(common)) < 1e-15
             assert land["valid"] == sum(map(sum, expected_land))
             assert transitions["water_excluded"] == 0
             assert land["water_excluded"] == transitions["valid"] - land["valid"]

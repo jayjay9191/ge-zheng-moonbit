@@ -6,6 +6,9 @@ pub(all) struct NdviTransitions {
   valid : Int32
   excluded : Int32
   water_excluded : Int32
+  qa_screened : Bool
+  land_only : Bool
+  valid_fraction : Double
 }
 
 ///|
@@ -72,13 +75,16 @@ pub fn ndvi_transitions(
     }
   }
   let overlap = (row1 - row0) * (col1 - col0)
-  ignore(shared_coverage(valid, overlap, min_coverage))
+  let valid_fraction = shared_coverage(valid, overlap, min_coverage)
   {
     cut_points: cut_points.copy(),
     counts,
     valid,
     excluded: overlap - valid,
     water_excluded,
+    qa_screened: screen_qa,
+    land_only,
+    valid_fraction,
   }
 }
 

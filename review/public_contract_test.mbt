@@ -26,6 +26,8 @@ test "review sample reproduces land-only NDVI movement" {
   assert_eq(result.counts, [[0, 0], [1, 0]])
   assert_eq((result.valid, result.excluded, result.water_excluded), (1, 2, 1))
   assert_eq((summary.lower, summary.same, summary.higher), (1, 0, 0))
+  assert_true(result.land_only && result.qa_screened)
+  assert_eq(result.valid_fraction, 1.0 / 3.0)
 }
 
 ///|
@@ -36,6 +38,9 @@ test "review sample rejects a forged transition total" {
     valid: 2,
     excluded: 0,
     water_excluded: 0,
+    qa_screened: true,
+    land_only: false,
+    valid_fraction: 1.0,
   }
   let result = Ok(@lib.summarize_ndvi_transitions(purported)) catch {
     err => Err(err)

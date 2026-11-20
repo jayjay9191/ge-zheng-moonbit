@@ -165,6 +165,13 @@ fn main {
       )
       let response = @json.ToJson::to_json(result)
       if response is Object(fields) {
+        fields["sources"] = Json::object({
+          "first_scene": Json(before.scene),
+          "second_scene": Json(after.scene),
+          "first_date": Json(before.date),
+          "second_date": Json(after.date),
+          "epsg": Json(before.epsg),
+        })
         fields["summary"] = @json.ToJson::to_json(
           @audit.summarize_ndvi_transitions(result),
         )

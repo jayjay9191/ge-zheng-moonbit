@@ -133,6 +133,9 @@ pub(all) struct NdviTransitions {
   valid : Int32
   excluded : Int32
   water_excluded : Int32
+  qa_screened : Bool
+  land_only : Bool
+  valid_fraction : Double
 }
 pub fn NdviTransitions::to_json(Self) -> @json.Json
 
