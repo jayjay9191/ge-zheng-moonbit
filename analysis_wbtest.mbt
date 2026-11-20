@@ -354,3 +354,40 @@ test "source inspection matches full grids with offsets and QA masking" {
   }
   assert_true(uncovered is Err(Invalid(_)))
 }
+
+///|
+test "change regions separate diagonal and opposite trends" {
+  let chip = test_chip(300000, 3500000, [14000], [0])
+  let base = compare(chip, chip, 0.15)
+  let grid = {
+    ..base,
+    width: 3,
+    height: 3,
+    overlap: 9,
+    valid: 8,
+    gain: 3,
+    loss: 3,
+    stable: 2,
+    excluded: 1,
+    classes: [1, 0, -1, 0, 1, -1, -1, -2, 1],
+  }
+  let four = change_regions(grid)
+  assert_eq(
+    [four.gain.regions, four.gain.largest_pixels, four.gain.isolated_pixels],
+    [3, 1, 3],
+  )
+  assert_eq([four.loss.regions, four.loss.largest_pixels], [2, 2])
+  let eight = change_regions(grid, connectivity=8)
+  assert_eq(
+    [eight.gain.regions, eight.gain.pixels, eight.gain.largest_pixels],
+    [1, 3, 3],
+  )
+  assert_eq(eight.gain.largest_area_m2, 2700L)
+  assert_eq(eight.loss.regions, 2)
+  assert_true(
+    (Ok(change_regions(grid, connectivity=6)) catch { e => Err(e) }) is Err(_),
+  )
+  assert_true(
+    (Ok(change_regions({ ..grid, gain: 2, })) catch { e => Err(e) }) is Err(_),
+  )
+}

@@ -26,6 +26,26 @@ def run_pair(paths, *flags, success=True, threshold="0.15"):
     return json.loads(result.stdout) if success else result.stdout
 
 
+def region_reference(classes, width, code, connectivity):
+    remaining = {divmod(i, width) for i, value in enumerate(classes) if value == code}
+    pixels = len(remaining)
+    sizes = []
+    offsets = [(r, c) for r in (-1, 0, 1) for c in (-1, 0, 1)
+               if (r or c) and (connectivity == 8 or abs(r) + abs(c) == 1)]
+    while remaining:
+        queue = [remaining.pop()]
+        for row, col in queue:
+            for dr, dc in offsets:
+                other = (row + dr, col + dc)
+                if other in remaining:
+                    remaining.remove(other)
+                    queue.append(other)
+        sizes.append(len(queue))
+    largest = max(sizes, default=0)
+    return dict(regions=len(sizes), pixels=pixels, isolated_pixels=sizes.count(1),
+                largest_pixels=largest, largest_area_m2=largest * 900)
+
+
 def verify_shifted():
     # An asymmetric integer offset, with distinct QA and water observations.
     before = dict(scene="synthetic-A", date="2024-01-01", epsg=32650, x=300000, y=3500000,
@@ -134,13 +154,24 @@ def main():
                                               excluded=labels[-2], valid=sum(labels.values()) - labels[-2])
             for field in ("gain", "loss", "stable", "valid", "excluded"):
                 assert sum(tile["counts"][field] for tile in tiles) == whole[field]
+        for connectivity in (4, 8):
+            regions = run(folder, "--regions", str(connectivity))
+            assert regions["connectivity"] == connectivity
+            for trend, code in (("gain", 1), ("loss", -1)):
+                actual = regions[trend]
+                actual["largest_area_m2"] = int(actual["largest_area_m2"])
+                assert actual == region_reference(classes, before["width"], code, connectivity)
+            print(f"PASS {folder} {connectivity}-neighbors: gain {regions['gain']['regions']}, "
+                  f"loss {regions['loss']['regions']}, largest gain/loss "
+                  f"{regions['gain']['largest_pixels']}/{regions['loss']['largest_pixels']} pixels")
         print(f"PASS {folder}: sweep, QA impact {changed_before} -> {changed_after}, 3 tile shapes")
     print(f"PASS independent Fraction replay: {compared:,} pixel comparisons; max delta error {max_error:.3g}")
     verify_shifted()
     for flags in (("--sweep", "0"), ("--sweep", ""), ("--sweep", "2.01"),
                   ("--tiles", "0x2"), ("--tiles", "2"), ("--tiles",),
                   ("--tiles", "129x2"), ("--sweep", "--qa-impact"),
-                  ("--qa-impact", "--direct"), ("--sweep", "--summary")):
+                  ("--qa-impact", "--direct"), ("--sweep", "--summary"),
+                  ("--regions", "6"), ("--regions", "--tiles", "2x2")):
         run("data", *flags, success=False)
     for threshold in ("0", "-0.1", "2.01"):
         run("data", "--sweep", threshold=threshold, success=False)

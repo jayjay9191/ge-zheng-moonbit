@@ -12,6 +12,7 @@
 moon run cmd/main -- data/feidong/scene-1.json data/feidong/scene-2.json 0.15 --sweep
 moon run cmd/main -- data/feidong/scene-1.json data/feidong/scene-2.json 0.15 --qa-impact
 moon run cmd/main -- data/feidong/scene-1.json data/feidong/scene-2.json 0.15 --tiles 2x2
+moon run cmd/main -- data/feidong/scene-1.json data/feidong/scene-2.json 0.15 --regions 4
 python scripts/verify_analysis.py
 ```
 
@@ -35,7 +36,13 @@ NDVI 差值（绝对误差上限 1e-12，本次最大 7.08e-16），逐块验证
 目标像元可用且覆盖门槛为默认值时，只计算该像元的 NDVI。设置了正覆盖门槛或
 目标像元被剔除时，会扫描交叠区域验证覆盖。CI 对照完整网格验证坐标、类别和差值。
 
-33 项 MoonBit 测试通过。公共分块接口在乘法与数组访问前
+连通斑块统计 `--regions [4|8]` 分开计算增加与减少的斑块数、孤立像元数和最大斑块面积。
+4 邻接只算共边，8 邻接也算共角。QA 排除和稳定像元不会连接斑块。
+肥东阈值 0.15 下，4 邻接的减少斑块有 94 个，8 邻接有 85 个，两者最大斑块
+均为 128 像元（115,200 平方米）。CI 用独立遍历对照巢湖和肥东。
+设计参考 [Rasterio 对栅格连通性的说明](https://github.com/rasterio/rasterio/blob/main/rasterio/features.py)。
+
+34 项 MoonBit 测试通过。公共分块接口在乘法与数组访问前
 验证窗口尺寸，拒绝超出 2048×2048 的构造输入。算法公式与更多参数见下文。
 源码版本为 0.1.1；Mooncakes 新包尚待登录后发布，下方离线发行包仍为旧版 0.1.0。
 

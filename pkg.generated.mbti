@@ -7,6 +7,8 @@ import {
 }
 
 // Values
+pub fn change_regions(Audit, connectivity? : Int32) -> ChangeRegions raise AuditError
+
 pub fn compare(Chip, Chip, Double, screen_qa? : Bool, min_coverage? : Double, pixel_grids? : Bool) -> Audit raise AuditError
 
 pub fn inspect_pixel(Chip, Chip, Audit, Int32, Int32) -> PixelEvidence raise AuditError
@@ -82,6 +84,13 @@ pub(all) struct ChangeCounts {
   excluded : Int32
 }
 
+#derive(@json.ToJson)
+pub(all) struct ChangeRegions {
+  connectivity : Int32
+  gain : RegionStats
+  loss : RegionStats
+}
+
 #derive(@json.FromJson)
 pub(all) struct Chip {
   scene : String
@@ -141,6 +150,15 @@ pub(all) struct QualityImpact {
   changed_after : Int32
   changed_removed : Int32
   conclusion : String
+}
+
+#derive(@json.ToJson)
+pub(all) struct RegionStats {
+  regions : Int32
+  pixels : Int32
+  isolated_pixels : Int32
+  largest_pixels : Int32
+  largest_area_m2 : Int64
 }
 
 #derive(@json.ToJson)

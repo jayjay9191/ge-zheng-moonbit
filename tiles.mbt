@@ -18,20 +18,9 @@ pub fn tile_counts(
   rows~ : Int32 = 2,
   columns~ : Int32 = 2,
 ) -> Array[TileCounts] raise AuditError {
-  // Public Audit values retain compare's size bounds before Int32 products.
-  if audit.width < 1 ||
-    audit.height < 1 ||
-    audit.width > 2048 ||
-    audit.height > 2048 {
-    raise Invalid(
-      "tile statistics require a window between 1 and 2048 pixels per side",
-    )
-  }
+  let size = complete_class_grid(audit)
   if rows < 1 || columns < 1 || rows > audit.height || columns > audit.width {
     raise Invalid("tile rows and columns must fit the common window")
-  }
-  if audit.classes.length() != audit.width * audit.height {
-    raise Invalid("tile statistics require the complete classification grid")
   }
   let tiles = []
   let totals = Array::make(4, 0)
@@ -45,11 +34,9 @@ pub fn tile_counts(
       for y in row_start..<row_end {
         for x in column_start..<column_end {
           let code = audit.classes[y * audit.width + x]
-          if code < -2 || code > 1 {
-            raise Invalid("classification grid contains an unsupported class")
-          }
-          counts[code + 2] += 1
-          totals[code + 2] += 1
+          let slot = class_slot(code)
+          counts[slot] += 1
+          totals[slot] += 1
         }
       }
       tiles.push({
@@ -69,7 +56,42 @@ pub fn tile_counts(
       })
     }
   }
-  if audit.overlap != audit.width * audit.height ||
+  check_class_totals(audit, size, totals)
+  tiles
+}
+
+///|
+fn complete_class_grid(audit : Audit) -> Int32 raise AuditError {
+  if audit.width < 1 ||
+    audit.height < 1 ||
+    audit.width > 2048 ||
+    audit.height > 2048 {
+    raise Invalid(
+      "classification grid must be between 1 and 2048 pixels per side",
+    )
+  }
+  let size = audit.width * audit.height
+  if audit.classes.length() != size {
+    raise Invalid("analysis requires the complete classification grid")
+  }
+  size
+}
+
+///|
+fn class_slot(code : Int32) -> Int32 raise AuditError {
+  if code < -2 || code > 1 {
+    raise Invalid("classification grid contains an unsupported class")
+  }
+  code + 2
+}
+
+///|
+fn check_class_totals(
+  audit : Audit,
+  size : Int32,
+  totals : Array[Int32],
+) -> Unit raise AuditError {
+  if audit.overlap != size ||
     [audit.excluded, audit.loss, audit.stable, audit.gain, audit.valid] !=
     [
       totals[0],
@@ -80,5 +102,4 @@ pub fn tile_counts(
     ] {
     raise Invalid("classification grid disagrees with whole-window counts")
   }
-  tiles
 }

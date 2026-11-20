@@ -20,7 +20,7 @@ fn main {
   let start = if args.length() > 2 && args[2] == "--" { 3 } else { 2 }
   if args.length() < start + 3 {
     println(
-      "Usage: moon run cmd/main -- <before.json> <after.json> <NDVI threshold> [--direct] [--min-coverage <fraction>] [--inspect <row> <column> | --summary | --sweep [0.10,0.15,0.20] | --qa-impact | --tiles 2x2]",
+      "Usage: moon run cmd/main -- <before.json> <after.json> <NDVI threshold> [--direct] [--min-coverage <fraction>] [--inspect <row> <column> | --summary | --sweep [0.10,0.15,0.20] | --qa-impact | --tiles 2x2 | --regions [4|8]]",
     )
     @env.exit(2)
   }
@@ -35,6 +35,7 @@ fn main {
     let mut inspect : (Int32, Int32)? = None
     let mut sweep : Array[Double]? = None
     let mut impact = false
+    let mut regions : Int32? = None
     let mut tiles : (Int32, Int32)? = None
     let mut index = start + 3
     while index < args.length() {
@@ -52,6 +53,14 @@ fn main {
             }
           }
           sweep = Some(thresholds)
+        }
+        "--regions" => {
+          let mut connectivity = 4
+          if index + 1 < args.length() && !args[index + 1].has_prefix("--") {
+            index += 1
+            connectivity = @json.from_json(@json.parse(args[index]))
+          }
+          regions = Some(connectivity)
         }
         "--tiles" => {
           index += 1
@@ -95,10 +104,11 @@ fn main {
       sweep is Some(_),
       impact,
       tiles is Some(_),
+      regions is Some(_),
     ]
     if modes.filter(value => value).length() > 1 {
       fail(
-        "choose only one of --summary, --inspect, --sweep, --qa-impact and --tiles",
+        "choose only one of --summary, --inspect, --sweep, --qa-impact, --tiles and --regions",
       )
     }
     if impact && direct {
@@ -152,6 +162,11 @@ fn main {
       println(
         @json.ToJson::to_json(@audit.tile_counts(result, rows~, columns~)).stringify(),
       )
+      return
+    }
+    if regions is Some(connectivity) {
+      let patches = @audit.change_regions(result, connectivity~)
+      println(@json.ToJson::to_json(patches).stringify())
       return
     }
     let json = @json.ToJson::to_json(result)
