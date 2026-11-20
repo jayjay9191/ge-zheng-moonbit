@@ -51,6 +51,19 @@ def verify_shifted():
                     verify(result, *chips, cutoff, screen_qa=not flags)
                     assert result["overlap"] == 6
                     assert row["counts"] == {key: result[key] for key in row["counts"]}
+        for flags in ((), ("--direct",)):
+            full = run_pair(paths, *flags)
+            for row, column in ((1, 1), (1, 2), (2, 3)):
+                index = (row - 1) * full["width"] + column - 1
+                evidence = run_pair(paths, *flags, "--inspect", str(row), str(column))
+                assert evidence["x_center"] == full["x"] + column * 30 - 15
+                assert evidence["y_center"] == full["y"] - row * 30 + 15
+                assert evidence["class_code"] == full["classes"][index]
+                assert evidence["delta"] == full["delta"][index]
+                assert evidence["reason_before"] == full["before_reason"][index]
+                assert evidence["reason_after"] == full["after_reason"][index]
+        run_pair(paths, "--inspect", "1", "1", "--min-coverage", "0.9", success=False)
+        print("PASS single-pixel source lookup matches full grids with and without QA")
         masked = dict(after, qa=[8] * len(after["qa"]))
         Path(paths[1]).write_text(json.dumps(masked), encoding="utf-8")
         impact = run_pair(paths, "--qa-impact", threshold="0.1")

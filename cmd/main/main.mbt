@@ -123,6 +123,23 @@ fn main {
       )
       return
     }
+    if inspect is Some((row, column)) {
+      let pixel = @audit.inspect_sources(
+        before,
+        after,
+        threshold,
+        row,
+        column,
+        screen_qa=!direct,
+        min_coverage=minimum,
+      )
+      let evidence = @json.ToJson::to_json(pixel)
+      if evidence is Object(fields) {
+        fields["delta"] = number_or_null(pixel.delta)
+      }
+      println(evidence.stringify())
+      return
+    }
     let result = @audit.compare(
       before,
       after,
@@ -135,15 +152,6 @@ fn main {
       println(
         @json.ToJson::to_json(@audit.tile_counts(result, rows~, columns~)).stringify(),
       )
-      return
-    }
-    if inspect is Some((row, column)) {
-      let pixel = @audit.inspect_pixel(before, after, result, row, column)
-      let evidence = @json.ToJson::to_json(pixel)
-      if evidence is Object(fields) {
-        fields["delta"] = number_or_null(pixel.delta)
-      }
-      println(evidence.stringify())
       return
     }
     let json = @json.ToJson::to_json(result)

@@ -416,7 +416,8 @@ pub fn inspect_pixel(
   row : Int32,
   column : Int32,
 ) -> PixelEvidence raise AuditError {
-  let { dx, dy, col0, row0, col1, row1, } = common_window(a, b)
+  let window = common_window(a, b)
+  let { col0, row0, col1, row1, .. } = window
   validate_threshold(result.threshold)
   let width = col1 - col0
   let height = row1 - row0
@@ -445,25 +446,87 @@ pub fn inspect_pixel(
     ].any(n => n != size) {
     raise Invalid("pixel evidence requires complete result grids")
   }
-  if row < 1 || row > result.height || column < 1 || column > result.width {
+  let (evidence, before_ndvi, after_ndvi, water) = source_pixel(
+    a,
+    b,
+    window,
+    result.threshold,
+    row,
+    column,
+    result.qa_screened,
+  )
+  let i = (row - 1) * width + column - 1
+  if result.ndvi_before[i] != before_ndvi ||
+    result.ndvi_after[i] != after_ndvi ||
+    result.water_code[i] != water ||
+    result.before_reason[i] != evidence.reason_before ||
+    result.after_reason[i] != evidence.reason_after ||
+    result.delta[i] != evidence.delta ||
+    result.classes[i] != evidence.class_code {
+    raise Invalid(
+      "pixel evidence disagrees with source QA or NDVI classification",
+    )
+  }
+  evidence
+}
+
+///|
+/// Read one cell from the input rasters without allocating result grids.
+pub fn inspect_sources(
+  a : Chip,
+  b : Chip,
+  threshold : Double,
+  row : Int32,
+  column : Int32,
+  screen_qa~ : Bool = true,
+  min_coverage~ : Double = 0.0,
+) -> PixelEvidence raise AuditError {
+  validate_threshold(threshold)
+  validate_coverage(min_coverage)
+  let window = common_window(a, b)
+  let (evidence, _, _, _) = source_pixel(
+    a, b, window, threshold, row, column, screen_qa,
+  )
+  if min_coverage > 0.0 || evidence.delta is None {
+    let counts = count_thresholds(a, b, window, [threshold], screen_qa)[0].counts
+    ignore(
+      shared_coverage(
+        counts.valid,
+        counts.valid + counts.excluded,
+        min_coverage,
+      ),
+    )
+  }
+  evidence
+}
+
+///|
+fn source_pixel(
+  a : Chip,
+  b : Chip,
+  window : CommonWindow,
+  threshold : Double,
+  row : Int32,
+  column : Int32,
+  screen_qa : Bool,
+) -> (PixelEvidence, Double?, Double?, Int32) raise AuditError {
+  let { dx, dy, col0, row0, col1, row1, } = window
+  if row < 1 || row > row1 - row0 || column < 1 || column > col1 - col0 {
     raise Invalid("pixel is outside the common grid")
   }
-  let x = result.x + (column - 1) * result.cell
-  let y = result.y - (row - 1) * result.cell
   let grid_row = row0 + row - 1
   let grid_col = col0 + column - 1
   let ia = grid_row * a.width + grid_col
   let ib = (grid_row - dy) * b.width + grid_col - dx
-  let i = (row - 1) * result.width + column - 1
-  let (reason_a, before) = pixel(a, ia, result.qa_screened)
-  let (reason_b, after) = pixel(b, ib, result.qa_screened)
+  let (reason_a, before) = pixel(a, ia, screen_qa)
+  let (reason_b, after) = pixel(b, ib, screen_qa)
   let expected_delta = if reason_a == 0 && reason_b == 0 {
     Some(after - before)
   } else {
     None
   }
   let expected_class = match expected_delta {
-    Some(d) => classify_change(d, result.threshold)
+    Some(d) => classify_change(d, threshold)
     None => -2
   }
   let before_ndvi = if reason_a == 0 { Some(before) } else { None }
@@ -473,20 +536,10 @@ pub fn inspect_pixel(
   } else {
     -1
   }
-  if result.ndvi_before[i] != before_ndvi ||
-    result.ndvi_after[i] != after_ndvi ||
-    result.water_code[i] != water ||
-    result.before_reason[i] != reason_a ||
-    result.after_reason[i] != reason_b ||
-    result.delta[i] != expected_delta ||
-    result.classes[i] != expected_class {
-    raise Invalid(
-      "pixel evidence disagrees with source QA or NDVI classification",
-    )
-  }
-  {
-    x_center: x + result.cell / 2,
-    y_center: y - result.cell / 2,
+
+  let evidence = {
+    x_center: a.x + grid_col * 30 + 15,
+    y_center: a.y - grid_row * 30 - 15,
     red_before: a.red[ia],
     nir_before: a.nir[ia],
     red_after: b.red[ib],
@@ -495,9 +548,10 @@ pub fn inspect_pixel(
     qa_after: b.qa[ib],
     saturation_before: a.saturation[ia],
     saturation_after: b.saturation[ib],
-    reason_before: result.before_reason[i],
-    reason_after: result.after_reason[i],
-    class_code: result.classes[i],
-    delta: result.delta[i],
+    reason_before: reason_a,
+    reason_after: reason_b,
+    class_code: expected_class,
+    delta: expected_delta,
   }
+  (evidence, before_ndvi, after_ndvi, water)
 }

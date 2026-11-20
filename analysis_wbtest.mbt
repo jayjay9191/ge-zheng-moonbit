@@ -334,3 +334,23 @@ test "QA impact reports when screening removes every usable pixel" {
     (Ok(qa_impact(a, bad, 0.15)) catch { e => Err(e) }) is Err(Invalid(_)),
   )
 }
+
+///|
+test "source inspection matches full grids with offsets and QA masking" {
+  let a = test_chip(300000, 3500000, [14000, 14000, 14000], [0, 0, 0])
+  let b = test_chip(300030, 3500000, [10000, 13000, 16000], [8, 0, 0])
+  for screen_qa in [true, false] {
+    let full = compare(a, b, 0.15, screen_qa~)
+    for col in [1, 2] {
+      let expected = inspect_pixel(a, b, full, 1, col)
+      let evidence = inspect_sources(a, b, 0.15, 1, col, screen_qa~)
+      assert_eq(Json(evidence).stringify(), Json(expected).stringify())
+    }
+  }
+  let bad = Ok(inspect_sources(a, b, 0.15, 1, 3)) catch { e => Err(e) }
+  assert_true(bad is Err(Invalid(_)))
+  let uncovered = Ok(inspect_sources(a, b, 0.15, 1, 2, min_coverage=0.6)) catch {
+    e => Err(e)
+  }
+  assert_true(uncovered is Err(Invalid(_)))
+}

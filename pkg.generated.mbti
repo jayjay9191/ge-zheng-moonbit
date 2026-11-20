@@ -11,6 +11,8 @@ pub fn compare(Chip, Chip, Double, screen_qa? : Bool, min_coverage? : Double, pi
 
 pub fn inspect_pixel(Chip, Chip, Audit, Int32, Int32) -> PixelEvidence raise AuditError
 
+pub fn inspect_sources(Chip, Chip, Double, Int32, Int32, screen_qa? : Bool, min_coverage? : Double) -> PixelEvidence raise AuditError
+
 pub fn parse_chip(String) -> Chip raise
 
 pub fn qa_impact(Chip, Chip, Double, min_coverage? : Double) -> QualityImpact raise AuditError
