@@ -49,3 +49,23 @@ test "review sample rejects a forged transition total" {
   }
   assert_true(result is Err(_))
 }
+
+///|
+test "review counts crossings at each cut, including a two-band jump" {
+  let matrix : @lib.NdviTransitions = {
+    cut_points: [0.2, 0.5],
+    counts: [[1, 0, 4], [2, 0, 0], [3, 0, 0]],
+    valid: 10,
+    excluded: 0,
+    water_excluded: 0,
+    qa_screened: true,
+    land_only: false,
+    valid_fraction: 1.0,
+  }
+  let result = @lib.summarize_ndvi_transitions(matrix)
+  assert_eq(
+    result.cut_crossings.map(cut => (cut.threshold, cut.up, cut.down, cut.net)),
+    [(0.2, 4, 5, -1), (0.5, 4, 3, 1)],
+  )
+  assert_eq(result.higher + result.lower, 9)
+}

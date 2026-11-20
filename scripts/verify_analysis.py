@@ -146,6 +146,8 @@ def main():
         for flags in ((), ("--direct",)):
             expected_transitions = [[0] * 3 for _ in range(3)]
             expected_land = [[0] * 3 for _ in range(3)]
+            cut_counts = [[0, 0] for _ in cuts]
+            land_cut_counts = [[0, 0] for _ in cuts]
             common = first.keys() & second.keys()
             for point in common:
                 a, b = (reference_pixel(chip, index, screen_qa=not flags)
@@ -153,8 +155,16 @@ def main():
                 if a is not None and b is not None:
                     row, column = bisect_right(cuts, a), bisect_right(cuts, b)
                     expected_transitions[row][column] += 1
-                    if not (before["qa"][first[point]] & 128 or after["qa"][second[point]] & 128):
+                    is_land = not (before["qa"][first[point]] & 128 or after["qa"][second[point]] & 128)
+                    if is_land:
                         expected_land[row][column] += 1
+                    for i, cut in enumerate(cuts):
+                        up, down = a < cut <= b, b < cut <= a
+                        cut_counts[i][0] += up
+                        cut_counts[i][1] += down
+                        if is_land:
+                            land_cut_counts[i][0] += up
+                            land_cut_counts[i][1] += down
             transitions = run_pair(paths, "0.2,0.5", *flags, threshold="--transitions")
             assert transitions["cut_points"] == [0.2, 0.5]
             assert transitions["qa_screened"] is (not flags)
@@ -183,6 +193,10 @@ def main():
                          net=after_totals[i] - before_totals[i],
                          exchange=min(before_totals[i], after_totals[i]) - expected_transitions[i][i])
                     for i in range(3)],
+                "cut_crossings": [
+                    dict(threshold=float(cut), up=up, down=down, net=up - down)
+                    for cut, (up, down) in zip(cuts, cut_counts)
+                ],
                 "lower": sum(expected_transitions[i][j] for i in range(3) for j in range(i)),
                 "same": sum(expected_transitions[i][i] for i in range(3)),
                 "higher": sum(expected_transitions[i][j] for i in range(3) for j in range(i + 1, 3)),
@@ -192,6 +206,10 @@ def main():
             land = run_pair(paths, "0.2,0.5", "--land-only", *flags, threshold="--transitions")
             assert land["counts"] == expected_land
             land_summary = land["summary"]
+            assert land_summary["cut_crossings"] == [
+                dict(threshold=float(cut), up=up, down=down, net=up - down)
+                for cut, (up, down) in zip(cuts, land_cut_counts)
+            ]
             land_quantity = sum(abs(sum(row) - sum(column))
                                 for row, column in zip(expected_land, zip(*expected_land))) // 2
             assert land_summary["quantity_disagreement"] == land_quantity
@@ -208,6 +226,11 @@ def main():
             assert land["water_excluded"] == transitions["valid"] - land["valid"]
             assert land["excluded"] == transitions["excluded"] + land["water_excluded"]
             if not flags:
+                reverse = run_pair(paths[::-1], "0.2,0.5", threshold="--transitions")
+                assert reverse["summary"]["cut_crossings"] == [
+                    dict(threshold=float(cut), up=down, down=up, net=down - up)
+                    for cut, (up, down) in zip(cuts, cut_counts)
+                ]
                 print(f"PASS {folder} NDVI transitions: {expected_transitions}; summary: {summary}")
                 print(f"PASS {folder} land transition matrix: {expected_land}; separately excluded water: {land['water_excluded']}")
         assert len(sweep["rows"]) == 3

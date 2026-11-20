@@ -103,6 +103,18 @@ pub extend NdviBandChange with @json.ToJson::{to_json}
 
 ///|
 #derive(ToJson)
+pub(all) struct NdviCutCrossing {
+  threshold : Double
+  up : Int32
+  down : Int32
+  net : Int32
+}
+
+///|
+pub extend NdviCutCrossing with @json.ToJson::{to_json}
+
+///|
+#derive(ToJson)
 pub(all) struct NdviTransitionSummary {
   before_counts : Array[Int32]
   after_counts : Array[Int32]
@@ -112,6 +124,7 @@ pub(all) struct NdviTransitionSummary {
   quantity_disagreement : Int32
   allocation_disagreement : Int32
   bands : Array[NdviBandChange]
+  cut_crossings : Array[NdviCutCrossing]
 }
 
 ///|
@@ -135,6 +148,9 @@ pub fn summarize_ndvi_transitions(
   }
   let before_counts = Array::make(bands, 0)
   let after_counts = Array::make(bands, 0)
+  // Each off-diagonal cell contributes to the contiguous cuts between the bands.
+  let up_delta = Array::make(bands, 0)
+  let down_delta = Array::make(bands, 0)
   let mut total = 0
   let mut lower = 0
   let mut same = 0
@@ -156,10 +172,14 @@ pub fn summarize_ndvi_transitions(
       after_counts[column] += count
       if column < row {
         lower += count
+        down_delta[column] += count
+        down_delta[row] -= count
       } else if column == row {
         same += count
       } else {
         higher += count
+        up_delta[row] += count
+        up_delta[column] -= count
       }
     }
   }
@@ -173,6 +193,14 @@ pub fn summarize_ndvi_transitions(
     let exchange = if gained < lost { gained } else { lost }
     { retained, gained, lost, net: gained - lost, exchange, }
   })
+  let cut_crossings : Array[NdviCutCrossing] = []
+  let mut up = 0
+  let mut down = 0
+  for i, threshold in matrix.cut_points {
+    up += up_delta[i]
+    down += down_delta[i]
+    cut_crossings.push({ threshold, up, down, net: up - down, })
+  }
   // Half the L1 distance of equal-total marginals equals the sum of positive offsets.
   let quantity_disagreement = details.fold(init=0, (sum, band) => {
     sum + (if band.net > 0 { band.net } else { 0 })
@@ -186,5 +214,6 @@ pub fn summarize_ndvi_transitions(
     quantity_disagreement,
     allocation_disagreement: lower + higher - quantity_disagreement,
     bands: details,
+    cut_crossings,
   }
 }

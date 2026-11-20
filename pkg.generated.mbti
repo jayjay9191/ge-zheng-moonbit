@@ -127,6 +127,15 @@ pub(all) struct NdviBandChange {
 pub fn NdviBandChange::to_json(Self) -> @json.Json
 
 #derive(@json.ToJson)
+pub(all) struct NdviCutCrossing {
+  threshold : Double
+  up : Int32
+  down : Int32
+  net : Int32
+}
+pub fn NdviCutCrossing::to_json(Self) -> @json.Json
+
+#derive(@json.ToJson)
 pub(all) struct NdviTransitionSummary {
   before_counts : Array[Int32]
   after_counts : Array[Int32]
@@ -136,6 +145,7 @@ pub(all) struct NdviTransitionSummary {
   quantity_disagreement : Int32
   allocation_disagreement : Int32
   bands : Array[NdviBandChange]
+  cut_crossings : Array[NdviCutCrossing]
 }
 pub fn NdviTransitionSummary::to_json(Self) -> @json.Json
 
