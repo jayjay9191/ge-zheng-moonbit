@@ -123,6 +123,8 @@ pub(all) struct NdviTransitionSummary {
   lower : Int32
   same : Int32
   higher : Int32
+  quantity_disagreement : Int32
+  allocation_disagreement : Int32
 }
 pub fn NdviTransitionSummary::to_json(Self) -> @json.Json
 

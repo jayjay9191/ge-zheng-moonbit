@@ -96,6 +96,8 @@ pub(all) struct NdviTransitionSummary {
   lower : Int32
   same : Int32
   higher : Int32
+  quantity_disagreement : Int32
+  allocation_disagreement : Int32
 }
 
 ///|
@@ -150,5 +152,21 @@ pub fn summarize_ndvi_transitions(
   if total != matrix.valid {
     raise Invalid("NDVI transition count disagrees with the valid pixel total")
   }
-  { before_counts, after_counts, lower, same, higher, }
+  // Half the L1 distance of equal-total marginals equals the sum of positive offsets.
+  let mut quantity_disagreement = 0
+  for band in 0..<bands {
+    let net = after_counts[band] - before_counts[band]
+    if net > 0 {
+      quantity_disagreement += net
+    }
+  }
+  {
+    before_counts,
+    after_counts,
+    lower,
+    same,
+    higher,
+    quantity_disagreement,
+    allocation_disagreement: lower + higher - quantity_disagreement,
+  }
 }

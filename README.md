@@ -7,7 +7,7 @@
 
 在仓库根目录运行 `moon test review`。两个 [公开接口案例](review/public_contract_test.mbt) 先复现单像元降档及水体、云像元的分别排除，再确认不守恒的矩阵会报错。真实裁片可用下面的命令复跑。
 
-运行 `python scripts/verify_analysis.py`。库源码排除 CLI、生成数据、测试、空行和注释后共 **1,078 行**，再排除纯标点行仍有 **901 行**。脚本逐文件报告计数并检查 500 行门槛。
+运行 `python scripts/verify_analysis.py`。库源码排除 CLI、生成数据、测试、空行和注释后共 **1,095 行**，再排除纯标点行仍有 **914 行**。脚本逐文件报告计数并检查 500 行门槛。
 
 [肥东两期裁片](data/feidong/)在 0.15 阈值下，QA 剔除前有 **3,031** 个达阈值像元，剔除后有 **663** 个。这个结果来自 MoonBit 的 [QA 配对审计](impact.mbt)。同一验收脚本还以 Python 有理数运算独立对照肥东和巢湖的 NDVI 分类，共核对 **196,608 次像元比较**。
 
@@ -28,6 +28,12 @@ moon run cmd/main -- data/feidong/scene-1.json data/feidong/scene-2.json --trans
 命令的 `summary` 字段包含两期各档总数，以及升档、同档和降档像元数。肥东示例中，升档 **177**、同档 **10,553**、降档 **527**，三项之和等于有效像元数。这里的升降指跨越设定的 NDVI 分界值，不能由此推断地类变化。
 
 外部项目可用 `summarize_ndvi_transitions(matrix)` 校验并汇总已持有的矩阵。接口拒绝非方阵、负计数和与有效像元总数矛盾的数据。复跑脚本逐项对照原裁片的矩阵和汇总结果。
+
+### 分解跨档差异
+
+`quantity_disagreement` 是两期各档数量差绝对值之和的一半，表示即使位置匹配达到最大，档位数量变化仍必然产生的差异。`allocation_disagreement` 是所有跨档像元减去数量差异，表示各档数量净变化无法解释的空间配置差异。两项均以共同有效像元计数。若两个像元交换档位，数量差异为 0，配置差异为 2。
+
+肥东在 QA 筛选下有 **704** 个跨档像元，分解结果为 **323 个数量差异 + 381 个配置差异**。交换两期两个值保持不变。巢湖、肥东的 QA 与陆地模式均由独立参考脚本复核。方法参考 [Pontius 与 Millones](https://commons.clarku.edu/faculty_geography/760/)。
 
 ## v0.1.1：先复跑新增分析
 
@@ -75,7 +81,7 @@ NDVI 差值（绝对误差上限 1e-12，本次最大 7.08e-16），逐块验证
 输出的 `water_excluded_pixels` 可核对按水体排除的像元数。
 设计参考 [Rasterio 对栅格连通性的说明](https://github.com/rasterio/rasterio/blob/main/rasterio/features.py)。
 
-43 项 MoonBit 测试通过。公共分块接口在乘法与数组访问前
+44 项 MoonBit 测试通过。公共分块接口在乘法与数组访问前
 验证窗口尺寸，拒绝超出 2048×2048 的构造输入。算法公式与更多参数见下文。
 源码版本为 0.1.1；Mooncakes 新包尚待登录后发布，下方离线发行包仍为旧版 0.1.0。
 

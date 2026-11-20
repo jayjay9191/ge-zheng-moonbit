@@ -585,3 +585,31 @@ test "land-only NDVI transitions remove water from either date after QA" {
   }
   assert_true(denied is Err(_))
 }
+
+///|
+test "NDVI disagreement separates net changes from spatial exchange" {
+  let (a, b) = analysis_pair(true)
+  let forward = summarize_ndvi_transitions(ndvi_transitions(a, b, [0.2, 0.5]))
+  let reverse = summarize_ndvi_transitions(ndvi_transitions(b, a, [0.2, 0.5]))
+  assert_eq(forward.quantity_disagreement, 323)
+  assert_eq(forward.allocation_disagreement, 381)
+  assert_eq(
+    forward.quantity_disagreement + forward.allocation_disagreement,
+    forward.lower + forward.higher,
+  )
+  assert_eq(reverse.quantity_disagreement, forward.quantity_disagreement)
+  assert_eq(reverse.allocation_disagreement, forward.allocation_disagreement)
+  let matrix = ndvi_transitions(a, a, [0.2])
+  let swap = {
+    ..matrix,
+    counts: [[0, 1], [1, 0]],
+    valid: 2,
+    excluded: 0,
+    valid_fraction: 1.0,
+  }
+  let balanced = summarize_ndvi_transitions(swap)
+  assert_eq(
+    (balanced.quantity_disagreement, balanced.allocation_disagreement),
+    (0, 2),
+  )
+}

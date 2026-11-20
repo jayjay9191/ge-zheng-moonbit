@@ -167,9 +167,15 @@ def main():
             assert abs(transitions["valid_fraction"] - transitions["valid"] / len(common)) < 1e-15
             assert transitions["counts"] == expected_transitions
             summary = transitions["summary"]
+            before_totals = [sum(row) for row in expected_transitions]
+            after_totals = [sum(column) for column in zip(*expected_transitions)]
+            quantity = sum(abs(a - b) for a, b in zip(before_totals, after_totals)) // 2
+            off_diagonal = sum(expected_transitions[i][j] for i in range(3) for j in range(3) if i != j)
             assert summary == {
-                "before_counts": [sum(row) for row in expected_transitions],
-                "after_counts": [sum(column) for column in zip(*expected_transitions)],
+                "before_counts": before_totals,
+                "after_counts": after_totals,
+                "quantity_disagreement": quantity,
+                "allocation_disagreement": off_diagonal - quantity,
                 "lower": sum(expected_transitions[i][j] for i in range(3) for j in range(i)),
                 "same": sum(expected_transitions[i][i] for i in range(3)),
                 "higher": sum(expected_transitions[i][j] for i in range(3) for j in range(i + 1, 3)),
@@ -178,6 +184,11 @@ def main():
             assert transitions["valid"] + transitions["excluded"] == len(common)
             land = run_pair(paths, "0.2,0.5", "--land-only", *flags, threshold="--transitions")
             assert land["counts"] == expected_land
+            land_summary = land["summary"]
+            land_quantity = sum(abs(sum(row) - sum(column))
+                                for row, column in zip(expected_land, zip(*expected_land))) // 2
+            assert land_summary["quantity_disagreement"] == land_quantity
+            assert land_summary["allocation_disagreement"] == land["valid"] - land_summary["same"] - land_quantity
             assert land["land_only"] is True and land["qa_screened"] is (not flags)
             assert abs(land["valid_fraction"] - land["valid"] / len(common)) < 1e-15
             assert land["valid"] == sum(map(sum, expected_land))
