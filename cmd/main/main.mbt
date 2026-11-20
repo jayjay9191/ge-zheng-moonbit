@@ -159,7 +159,13 @@ fn main {
         screen_qa=!direct,
         min_coverage=minimum,
       )
-      println(@json.ToJson::to_json(result).stringify())
+      let response = @json.ToJson::to_json(result)
+      if response is Object(fields) {
+        fields["summary"] = @json.ToJson::to_json(
+          @audit.summarize_ndvi_transitions(result),
+        )
+      }
+      println(response.stringify())
       return
     }
     if sweep is Some(thresholds) {

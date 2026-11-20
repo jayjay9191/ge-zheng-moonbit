@@ -515,3 +515,34 @@ test "NDVI transitions apply exact bin boundaries and reject invalid cut points"
   }
   assert_true(coverage is Err(_))
 }
+
+///|
+test "NDVI transition summary accounts for every band and direction" {
+  let (a, b) = analysis_pair(true)
+  let m = ndvi_transitions(a, b, [0.2, 0.5])
+  let summary = summarize_ndvi_transitions(m)
+  assert_eq(summary.before_counts, [165, 1495, 9597])
+  assert_eq(summary.after_counts, [192, 1791, 9274])
+  assert_eq((summary.lower, summary.same, summary.higher), (527, 10553, 177))
+  assert_eq(summary.lower + summary.same + summary.higher, m.valid)
+  let reversed = summarize_ndvi_transitions(ndvi_transitions(b, a, [0.2, 0.5]))
+  assert_eq(reversed.before_counts, summary.after_counts)
+  assert_eq(reversed.lower, summary.higher)
+}
+
+///|
+test "NDVI transition summary refuses forged counts and dimensions" {
+  let (a, b) = analysis_pair(true)
+  let m = ndvi_transitions(a, b, [0.2, 0.5])
+  let invalid = [
+    { ..m, counts: [[1]], },
+    { ..m, counts: [[-1, 0, 0], [0, 11258, 0], [0, 0, 0]], },
+    { ..m, valid: m.valid - 1, },
+    { ..m, excluded: -1, },
+    { ..m, counts: [[2147483647, 0, 0], [0, 2147483647, 0], [0, 0, 0]], },
+  ]
+  for bad in invalid {
+    let problem = Ok(summarize_ndvi_transitions(bad)) catch { err => Err(err) }
+    assert_true(problem is Err(_))
+  }
+}

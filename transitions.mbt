@@ -20,15 +20,9 @@ fn ndvi_band(value : Double, cuts : Array[Double]) -> Int32 {
 }
 
 ///|
-/// Count before-band (row) to after-band (column) transitions on common valid pixels.
-/// Cut points are strictly increasing in (-1, 1); equality enters the higher band.
-pub fn ndvi_transitions(
-  before : Chip,
-  after : Chip,
+fn validate_ndvi_cut_points(
   cut_points : Array[Double],
-  screen_qa~ : Bool = true,
-  min_coverage~ : Double = 0.0,
-) -> NdviTransitions raise AuditError {
+) -> Unit raise AuditError {
   if cut_points.is_empty() || cut_points.length() > 16 {
     raise Invalid("NDVI transitions require 1 to 16 cut points")
   }
@@ -39,6 +33,19 @@ pub fn ndvi_transitions(
     }
     previous = cut
   }
+}
+
+///|
+/// Count before-band (row) to after-band (column) transitions on common valid pixels.
+/// Cut points are strictly increasing in (-1, 1); equality enters the higher band.
+pub fn ndvi_transitions(
+  before : Chip,
+  after : Chip,
+  cut_points : Array[Double],
+  screen_qa~ : Bool = true,
+  min_coverage~ : Double = 0.0,
+) -> NdviTransitions raise AuditError {
+  validate_ndvi_cut_points(cut_points)
   validate_coverage(min_coverage)
   let { dx, dy, row0, row1, col0, col1, } = common_window(before, after)
   let bands = cut_points.length() + 1
@@ -61,4 +68,67 @@ pub fn ndvi_transitions(
   let overlap = (row1 - row0) * (col1 - col0)
   ignore(shared_coverage(valid, overlap, min_coverage))
   { cut_points: cut_points.copy(), counts, valid, excluded: overlap - valid, }
+}
+
+///|
+#derive(ToJson)
+pub(all) struct NdviTransitionSummary {
+  before_counts : Array[Int32]
+  after_counts : Array[Int32]
+  lower : Int32
+  same : Int32
+  higher : Int32
+}
+
+///|
+pub extend NdviTransitionSummary with @json.ToJson::{to_json}
+
+///|
+/// Count movements between NDVI bands, over the same common valid pixels.
+pub fn summarize_ndvi_transitions(
+  matrix : NdviTransitions,
+) -> NdviTransitionSummary raise AuditError {
+  validate_ndvi_cut_points(matrix.cut_points)
+  let bands = matrix.cut_points.length() + 1
+  if matrix.counts.length() != bands ||
+    matrix.valid < 1 ||
+    matrix.valid > 2048 * 2048 ||
+    matrix.excluded < 0 ||
+    matrix.excluded > 2048 * 2048 - matrix.valid {
+    raise Invalid("NDVI transition dimensions or totals are invalid")
+  }
+  let before_counts = Array::make(bands, 0)
+  let after_counts = Array::make(bands, 0)
+  let mut total = 0
+  let mut lower = 0
+  let mut same = 0
+  let mut higher = 0
+  for row in 0..<bands {
+    let cells = matrix.counts[row]
+    if cells.length() != bands {
+      raise Invalid("NDVI transition matrix must be square")
+    }
+    for column in 0..<bands {
+      let count = cells[column]
+      if count < 0 || count > matrix.valid - total {
+        raise Invalid(
+          "NDVI transition count disagrees with the valid pixel total",
+        )
+      }
+      total += count
+      before_counts[row] += count
+      after_counts[column] += count
+      if column < row {
+        lower += count
+      } else if column == row {
+        same += count
+      } else {
+        higher += count
+      }
+    }
+  }
+  if total != matrix.valid {
+    raise Invalid("NDVI transition count disagrees with the valid pixel total")
+  }
+  { before_counts, after_counts, lower, same, higher, }
 }

@@ -154,10 +154,18 @@ def main():
             transitions = run_pair(paths, "0.2,0.5", *flags, threshold="--transitions")
             assert transitions["cut_points"] == [0.2, 0.5]
             assert transitions["counts"] == expected_transitions
+            summary = transitions["summary"]
+            assert summary == {
+                "before_counts": [sum(row) for row in expected_transitions],
+                "after_counts": [sum(column) for column in zip(*expected_transitions)],
+                "lower": sum(expected_transitions[i][j] for i in range(3) for j in range(i)),
+                "same": sum(expected_transitions[i][i] for i in range(3)),
+                "higher": sum(expected_transitions[i][j] for i in range(3) for j in range(i + 1, 3)),
+            }
             assert transitions["valid"] == sum(map(sum, expected_transitions))
             assert transitions["valid"] + transitions["excluded"] == len(common)
             if not flags:
-                print(f"PASS {folder} NDVI transitions: {expected_transitions}")
+                print(f"PASS {folder} NDVI transitions: {expected_transitions}; summary: {summary}")
         assert len(sweep["rows"]) == 3
         for i, cutoff in enumerate((0.1, 0.15, 0.2)):
             row = sweep["rows"][i]

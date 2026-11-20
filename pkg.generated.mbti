@@ -25,6 +25,8 @@ pub fn qa_impact(Chip, Chip, Double, min_coverage? : Double) -> QualityImpact ra
 
 pub fn sensitivity(Chip, Chip, Array[Double], screen_qa? : Bool, min_coverage? : Double) -> Sensitivity raise AuditError
 
+pub fn summarize_ndvi_transitions(NdviTransitions) -> NdviTransitionSummary raise AuditError
+
 pub fn tile_counts(Audit, rows? : Int32, columns? : Int32) -> Array[TileCounts] raise AuditError
 
 pub fn validate_threshold(Double) -> Unit raise AuditError
@@ -113,6 +115,16 @@ pub(all) struct Chip {
   saturation : Array[Int32]
 }
 pub fn Chip::from_json(@json.Json, @json.DecodeContext) -> Self raise @json.JsonDecodeError
+
+#derive(@json.ToJson)
+pub(all) struct NdviTransitionSummary {
+  before_counts : Array[Int32]
+  after_counts : Array[Int32]
+  lower : Int32
+  same : Int32
+  higher : Int32
+}
+pub fn NdviTransitionSummary::to_json(Self) -> @json.Json
 
 #derive(@json.ToJson)
 pub(all) struct NdviTransitions {
