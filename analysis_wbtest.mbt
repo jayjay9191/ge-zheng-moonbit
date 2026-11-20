@@ -546,3 +546,42 @@ test "NDVI transition summary refuses forged counts and dimensions" {
     assert_true(problem is Err(_))
   }
 }
+
+///|
+test "land-only NDVI transitions remove water from either date after QA" {
+  let (template, _) = analysis_pair(true)
+  let before = {
+    ..template,
+    width: 5,
+    height: 1,
+    red: [20000, 20000, 20000, 20000, 20000],
+    nir: [20000, 20000, 20000, 20000, 20000],
+    qa: [0, 128, 0, 128, 0],
+    saturation: [0, 0, 0, 0, 0],
+  }
+  let after = {
+    ..before,
+    nir: [10000, 10000, 10000, 10000, 10000],
+    qa: [0, 0, 128, 8, 0],
+  }
+  let counts = ndvi_transitions(before, after, [0.0], land_only=true)
+  assert_eq(counts.counts, [[0, 0], [2, 0]])
+  assert_eq(counts.valid, 2)
+  assert_eq(counts.excluded, 3)
+  assert_eq(counts.water_excluded, 2)
+  let direct = ndvi_transitions(
+    before,
+    after,
+    [0.0],
+    screen_qa=false,
+    land_only=true,
+  )
+  assert_eq(direct.water_excluded, 3)
+  assert_eq(direct.valid, 2)
+  let denied = Ok(
+    ndvi_transitions(before, after, [0.0], land_only=true, min_coverage=0.5),
+  ) catch {
+    err => Err(err)
+  }
+  assert_true(denied is Err(_))
+}

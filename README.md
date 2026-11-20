@@ -5,7 +5,9 @@
 
 ## 初审核对
 
-运行 `python scripts/verify_analysis.py`。库源码排除 CLI、生成数据、测试、空行和注释后共 **1,058 行**，再排除纯标点行仍有 **883 行**。脚本逐文件报告计数并检查 500 行门槛。
+在仓库根目录运行 `moon test review`。两个 [公开接口案例](review/public_contract_test.mbt) 先复现单像元降档及水体、云像元的分别排除，再确认不守恒的矩阵会报错。真实裁片可用下面的命令复跑。
+
+运行 `python scripts/verify_analysis.py`。库源码排除 CLI、生成数据、测试、空行和注释后共 **1,072 行**，再排除纯标点行仍有 **895 行**。脚本逐文件报告计数并检查 500 行门槛。
 
 [肥东两期裁片](data/feidong/)在 0.15 阈值下，QA 剔除前有 **3,031** 个达阈值像元，剔除后有 **663** 个。这个结果来自 MoonBit 的 [QA 配对审计](impact.mbt)。同一验收脚本还以 Python 有理数运算独立对照肥东和巢湖的 NDVI 分类，共核对 **196,608 次像元比较**。
 
@@ -18,6 +20,8 @@ moon run cmd/main -- data/feidong/scene-1.json data/feidong/scene-2.json --trans
 ```
 
 矩阵的行是第一期、列是第二期。分界值归入较高档，两期均有效才计入矩阵。示例 3×3 矩阵共有 11,257 个有效像元，其中从中档进入高档 160 个，从高档进入中档 483 个。分界值由调用方按分析目的提供。它们用于 NDVI 分段统计。
+
+添加 `--land-only` 可只分析两期均未标为水体的有效像元。肥东质检后原有 11,257 个有效像元，再排除 45 个水体像元，余 11,212 个。输出 `water_excluded` 是排除总数的子集。覆盖率继续按整个共同窗口计算。
 
 其他 MoonBit 项目可导入 `jayjay9191/ge-zheng-moonbit` 并调用 `ndvi_transitions(before, after, [0.2, 0.5])`。接口用共同网格读取两期 NDVI，支持现有质检开关和最低有效覆盖率。验收脚本按地面坐标匹配，以分数计算独立核对两个真实样区的矩阵。
 
@@ -71,7 +75,7 @@ NDVI 差值（绝对误差上限 1e-12，本次最大 7.08e-16），逐块验证
 输出的 `water_excluded_pixels` 可核对按水体排除的像元数。
 设计参考 [Rasterio 对栅格连通性的说明](https://github.com/rasterio/rasterio/blob/main/rasterio/features.py)。
 
-40 项 MoonBit 测试通过。公共分块接口在乘法与数组访问前
+43 项 MoonBit 测试通过。公共分块接口在乘法与数组访问前
 验证窗口尺寸，拒绝超出 2048×2048 的构造输入。算法公式与更多参数见下文。
 源码版本为 0.1.1；Mooncakes 新包尚待登录后发布，下方离线发行包仍为旧版 0.1.0。
 

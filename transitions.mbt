@@ -5,6 +5,7 @@ pub(all) struct NdviTransitions {
   counts : Array[Array[Int32]]
   valid : Int32
   excluded : Int32
+  water_excluded : Int32
 }
 
 ///|
@@ -44,6 +45,7 @@ pub fn ndvi_transitions(
   cut_points : Array[Double],
   screen_qa~ : Bool = true,
   min_coverage~ : Double = 0.0,
+  land_only~ : Bool = false,
 ) -> NdviTransitions raise AuditError {
   validate_ndvi_cut_points(cut_points)
   validate_coverage(min_coverage)
@@ -51,23 +53,33 @@ pub fn ndvi_transitions(
   let bands = cut_points.length() + 1
   let counts = Array::makei(bands, _ => Array::make(bands, 0))
   let mut valid = 0
+  let mut water_excluded = 0
   for row in row0..<row1 {
     for col in col0..<col1 {
-      let (reason_a, a) = pixel(before, row * before.width + col, screen_qa)
-      let (reason_b, b) = pixel(
-        after,
-        (row - dy) * after.width + col - dx,
-        screen_qa,
-      )
-      if reason_a == 0 && reason_b == 0 {
-        counts[ndvi_band(a, cut_points)][ndvi_band(b, cut_points)] += 1
-        valid += 1
+      let ia = row * before.width + col
+      let ib = (row - dy) * after.width + col - dx
+      let (reason_a, a) = pixel(before, ia, screen_qa)
+      let (reason_b, b) = pixel(after, ib, screen_qa)
+      if reason_a != 0 || reason_b != 0 {
+        continue
       }
+      if land_only && water_state(before, ia, after, ib) != 0 {
+        water_excluded += 1
+        continue
+      }
+      counts[ndvi_band(a, cut_points)][ndvi_band(b, cut_points)] += 1
+      valid += 1
     }
   }
   let overlap = (row1 - row0) * (col1 - col0)
   ignore(shared_coverage(valid, overlap, min_coverage))
-  { cut_points: cut_points.copy(), counts, valid, excluded: overlap - valid, }
+  {
+    cut_points: cut_points.copy(),
+    counts,
+    valid,
+    excluded: overlap - valid,
+    water_excluded,
+  }
 }
 
 ///|
@@ -94,7 +106,9 @@ pub fn summarize_ndvi_transitions(
     matrix.valid < 1 ||
     matrix.valid > 2048 * 2048 ||
     matrix.excluded < 0 ||
-    matrix.excluded > 2048 * 2048 - matrix.valid {
+    matrix.excluded > 2048 * 2048 - matrix.valid ||
+    matrix.water_excluded < 0 ||
+    matrix.water_excluded > matrix.excluded {
     raise Invalid("NDVI transition dimensions or totals are invalid")
   }
   let before_counts = Array::make(bands, 0)

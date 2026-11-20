@@ -145,12 +145,16 @@ def main():
         first, second = locations(before), locations(after)
         for flags in ((), ("--direct",)):
             expected_transitions = [[0] * 3 for _ in range(3)]
+            expected_land = [[0] * 3 for _ in range(3)]
             common = first.keys() & second.keys()
             for point in common:
                 a, b = (reference_pixel(chip, index, screen_qa=not flags)
                         for chip, index in ((before, first[point]), (after, second[point])))
                 if a is not None and b is not None:
-                    expected_transitions[bisect_right(cuts, a)][bisect_right(cuts, b)] += 1
+                    row, column = bisect_right(cuts, a), bisect_right(cuts, b)
+                    expected_transitions[row][column] += 1
+                    if not (before["qa"][first[point]] & 128 or after["qa"][second[point]] & 128):
+                        expected_land[row][column] += 1
             transitions = run_pair(paths, "0.2,0.5", *flags, threshold="--transitions")
             assert transitions["cut_points"] == [0.2, 0.5]
             assert transitions["counts"] == expected_transitions
@@ -164,8 +168,15 @@ def main():
             }
             assert transitions["valid"] == sum(map(sum, expected_transitions))
             assert transitions["valid"] + transitions["excluded"] == len(common)
+            land = run_pair(paths, "0.2,0.5", "--land-only", *flags, threshold="--transitions")
+            assert land["counts"] == expected_land
+            assert land["valid"] == sum(map(sum, expected_land))
+            assert transitions["water_excluded"] == 0
+            assert land["water_excluded"] == transitions["valid"] - land["valid"]
+            assert land["excluded"] == transitions["excluded"] + land["water_excluded"]
             if not flags:
                 print(f"PASS {folder} NDVI transitions: {expected_transitions}; summary: {summary}")
+                print(f"PASS {folder} land transition matrix: {expected_land}; separately excluded water: {land['water_excluded']}")
         assert len(sweep["rows"]) == 3
         for i, cutoff in enumerate((0.1, 0.15, 0.2)):
             row = sweep["rows"][i]

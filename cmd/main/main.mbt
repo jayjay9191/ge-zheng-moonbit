@@ -145,8 +145,11 @@ fn main {
         "choose only one of --summary, --inspect, --sweep, --qa-impact, --tiles, --regions and --transitions",
       )
     }
-    if (region_min is Some(_) || land_only) && regions is None {
-      fail("--min-region-pixels and --land-only require --regions")
+    if region_min is Some(_) && regions is None {
+      fail("--min-region-pixels requires --regions")
+    }
+    if land_only && regions is None && transition is None {
+      fail("--land-only requires --regions or --transitions")
     }
     if impact && direct {
       fail("--qa-impact compares both QA policies; do not also select --direct")
@@ -158,6 +161,7 @@ fn main {
         cuts,
         screen_qa=!direct,
         min_coverage=minimum,
+        land_only~,
       )
       let response = @json.ToJson::to_json(result)
       if response is Object(fields) {
