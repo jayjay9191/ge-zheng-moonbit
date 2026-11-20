@@ -4,6 +4,8 @@ pub(all) struct RegionStats {
   regions : Int32
   pixels : Int32
   isolated_pixels : Int32
+  discarded_regions : Int32
+  discarded_pixels : Int32
   largest_pixels : Int32
   largest_area_m2 : Int64
 }
@@ -12,6 +14,7 @@ pub(all) struct RegionStats {
 #derive(ToJson)
 pub(all) struct ChangeRegions {
   connectivity : Int32
+  min_pixels : Int32
   gain : RegionStats
   loss : RegionStats
 }
@@ -21,9 +24,13 @@ pub(all) struct ChangeRegions {
 pub fn change_regions(
   audit : Audit,
   connectivity~ : Int32 = 4,
+  min_pixels~ : Int32 = 1,
 ) -> ChangeRegions raise AuditError {
   if connectivity != 4 && connectivity != 8 {
     raise Invalid("region connectivity must be 4 or 8")
+  }
+  if min_pixels < 1 {
+    raise Invalid("minimum region size must be at least one pixel")
   }
   if audit.cell != 30 {
     raise Invalid("region area requires 30 m pixels")
@@ -33,6 +40,8 @@ pub fn change_regions(
   let totals = Array::make(4, 0)
   let regions = Array::make(4, 0)
   let isolated = Array::make(4, 0)
+  let small_regions = Array::make(4, 0)
+  let small_pixels = Array::make(4, 0)
   let largest = Array::make(4, 0)
   let stack : Array[Int32] = []
   let steps = [
@@ -52,7 +61,6 @@ pub fn change_regions(
     if seen[i] || (code != 1 && code != -1) {
       continue
     }
-    regions[slot] += 1
     let mut pixels = 0
     stack.push(i)
     seen[i] = true
@@ -72,6 +80,12 @@ pub fn change_regions(
         }
       }
     }
+    if pixels < min_pixels {
+      small_regions[slot] += 1
+      small_pixels[slot] += pixels
+      continue
+    }
+    regions[slot] += 1
     if pixels == 1 {
       isolated[slot] += 1
     }
@@ -82,10 +96,12 @@ pub fn change_regions(
   check_class_totals(audit, size, totals)
   let stats = slot => {
     regions: regions[slot],
-    pixels: totals[slot],
+    pixels: totals[slot] - small_pixels[slot],
     isolated_pixels: isolated[slot],
+    discarded_regions: small_regions[slot],
+    discarded_pixels: small_pixels[slot],
     largest_pixels: largest[slot],
     largest_area_m2: largest[slot].to_int64() * 900L,
   }
-  { connectivity, gain: stats(3), loss: stats(1), }
+  { connectivity, min_pixels, gain: stats(3), loss: stats(1), }
 }

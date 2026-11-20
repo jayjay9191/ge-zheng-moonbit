@@ -20,7 +20,7 @@ fn main {
   let start = if args.length() > 2 && args[2] == "--" { 3 } else { 2 }
   if args.length() < start + 3 {
     println(
-      "Usage: moon run cmd/main -- <before.json> <after.json> <NDVI threshold> [--direct] [--min-coverage <fraction>] [--inspect <row> <column> | --summary | --sweep [0.10,0.15,0.20] | --qa-impact | --tiles 2x2 | --regions [4|8]]",
+      "Usage: moon run cmd/main -- <before.json> <after.json> <NDVI threshold> [--direct] [--min-coverage <fraction>] [--inspect <row> <column> | --summary | --sweep [0.10,0.15,0.20] | --qa-impact | --tiles 2x2 | --regions [4|8] [--min-region-pixels <pixels>]]",
     )
     @env.exit(2)
   }
@@ -36,6 +36,7 @@ fn main {
     let mut sweep : Array[Double]? = None
     let mut impact = false
     let mut regions : Int32? = None
+    let mut region_min : Int32? = None
     let mut tiles : (Int32, Int32)? = None
     let mut index = start + 3
     while index < args.length() {
@@ -61,6 +62,13 @@ fn main {
             connectivity = @json.from_json(@json.parse(args[index]))
           }
           regions = Some(connectivity)
+        }
+        "--min-region-pixels" => {
+          index += 1
+          if index >= args.length() {
+            fail("--min-region-pixels requires a positive integer")
+          }
+          region_min = Some(@json.from_json(@json.parse(args[index])))
         }
         "--tiles" => {
           index += 1
@@ -110,6 +118,9 @@ fn main {
       fail(
         "choose only one of --summary, --inspect, --sweep, --qa-impact, --tiles and --regions",
       )
+    }
+    if region_min is Some(_) && regions is None {
+      fail("--min-region-pixels requires --regions")
     }
     if impact && direct {
       fail("--qa-impact compares both QA policies; do not also select --direct")
@@ -165,7 +176,8 @@ fn main {
       return
     }
     if regions is Some(connectivity) {
-      let patches = @audit.change_regions(result, connectivity~)
+      let min_pixels = region_min.unwrap_or(1)
+      let patches = @audit.change_regions(result, connectivity~, min_pixels~)
       println(@json.ToJson::to_json(patches).stringify())
       return
     }

@@ -384,6 +384,22 @@ test "change regions separate diagonal and opposite trends" {
   )
   assert_eq(eight.gain.largest_area_m2, 2700L)
   assert_eq(eight.loss.regions, 2)
+  let filtered = change_regions(grid, min_pixels=2)
+  assert_eq(filtered.min_pixels, 2)
+  assert_eq([filtered.gain.regions, filtered.gain.pixels], [0, 0])
+  assert_eq([filtered.gain.discarded_regions, filtered.gain.discarded_pixels], [
+    3, 3,
+  ])
+  assert_eq(
+    [filtered.loss.regions, filtered.loss.pixels, filtered.loss.largest_pixels],
+    [1, 2, 2],
+  )
+  assert_eq([filtered.loss.discarded_regions, filtered.loss.discarded_pixels], [
+    1, 1,
+  ])
+  assert_true(
+    (Ok(change_regions(grid, min_pixels=0)) catch { e => Err(e) }) is Err(_),
+  )
   assert_true(
     (Ok(change_regions(grid, connectivity=6)) catch { e => Err(e) }) is Err(_),
   )
