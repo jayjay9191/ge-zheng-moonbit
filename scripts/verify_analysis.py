@@ -1,7 +1,11 @@
 """Check the real built CLI against both measured Landsat windows."""
+from collections import Counter
 import json
 from pathlib import Path
 import subprocess
+
+from replay import verify
+from source_manifest import load_pair
 
 ROOT = Path(__file__).resolve().parents[1]
 PROGRAM = ROOT / "_build/js/release/build/cmd/main/main.js"
@@ -30,10 +34,23 @@ def main():
         "data": ([11446, 10703, 10013], [285, 94, 52], 14224, 2160, 11239, 10797),
         "data/feidong": ([155, 86, 49], [1495, 577, 290], 11257, 5127, 3031, 663),
     }
+    compared = 0
+    max_error = 0.0
     for folder, (gains, losses, valid, excluded, changed_before, changed_after) in expected.items():
         sweep = run(folder, "--sweep")
-        for i, row in enumerate(sweep["rows"]):
-            assert row["threshold"] == [0.1, 0.15, 0.2][i]
+        _, (before, after) = load_pair(ROOT, ROOT / folder / "sources.json")
+        assert len(sweep["rows"]) == 3
+        for i, cutoff in enumerate((0.1, 0.15, 0.2)):
+            row = sweep["rows"][i]
+            assert row["threshold"] == cutoff
+            screened = run(folder, threshold=str(cutoff))
+            direct = run(folder, "--direct", threshold=str(cutoff))
+            max_error = max(max_error, verify(screened, before, after, cutoff),
+                            verify(direct, before, after, cutoff, screen_qa=False))
+            compared += 2 * screened["overlap"]
+            assert row["counts"] == {key: screened[key] for key in row["counts"]}
+            if cutoff == 0.15:
+                classes = screened["classes"]
             assert row["counts"] == dict(gain=gains[i], loss=losses[i], valid=valid,
                                           excluded=excluded, stable=valid-gains[i]-losses[i])
         assert run(folder, "--sweep", "0.2,0.1")["rows"][0]["threshold"] == 0.2
@@ -42,9 +59,24 @@ def main():
         whole = run(folder, "--summary")
         for shape in ("2x2", "1x1", "3x5"):
             tiles = run(folder, "--tiles", shape)
+            rows, columns = map(int, shape.split("x"))
+            width, height = before["width"], before["height"]
+            assert len(tiles) == rows * columns
+            for index, tile in enumerate(tiles):
+                row, column = divmod(index, columns)
+                top, bottom = row * height // rows, (row + 1) * height // rows
+                left, right = column * width // columns, (column + 1) * width // columns
+                assert [tile[key] for key in ("row", "column", "row_start", "column_start",
+                                             "height", "width")] == [
+                    row + 1, column + 1, top, left, bottom - top, right - left]
+                labels = Counter(classes[y * width + x]
+                                 for y in range(top, bottom) for x in range(left, right))
+                assert tile["counts"] == dict(gain=labels[1], loss=labels[-1], stable=labels[0],
+                                              excluded=labels[-2], valid=sum(labels.values()) - labels[-2])
             for field in ("gain", "loss", "stable", "valid", "excluded"):
                 assert sum(tile["counts"][field] for tile in tiles) == whole[field]
         print(f"PASS {folder}: sweep, QA impact {changed_before} -> {changed_after}, 3 tile shapes")
+    print(f"PASS independent Fraction replay: {compared:,} pixel comparisons; max delta error {max_error:.3g}")
     for flags in (("--sweep", "0"), ("--sweep", ""), ("--sweep", "2.01"),
                   ("--tiles", "0x2"), ("--tiles", "2"), ("--tiles",),
                   ("--tiles", "129x2"), ("--sweep", "--qa-impact"),
