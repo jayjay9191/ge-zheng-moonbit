@@ -217,3 +217,101 @@ pub fn summarize_ndvi_transitions(
     cut_crossings,
   }
 }
+
+///|
+#derive(ToJson)
+pub(all) struct NdviCountBounds {
+  guaranteed : Int32
+  observed : Int32
+  possible : Int32
+}
+
+///|
+#derive(ToJson)
+pub(all) struct NdviThresholdBounds {
+  threshold : Double
+  margin : Double
+  up : NdviCountBounds
+  down : NdviCountBounds
+  valid : Int32
+  excluded : Int32
+  water_excluded : Int32
+  qa_screened : Bool
+  land_only : Bool
+  valid_fraction : Double
+}
+
+///|
+pub extend NdviThresholdBounds with @json.ToJson::{to_json}
+
+///|
+/// Count guaranteed, observed, and possible crossings under independent bounded
+/// perturbations of each measured NDVI. Equality belongs to the upper side.
+pub fn ndvi_threshold_bounds(
+  before : Chip,
+  after : Chip,
+  threshold : Double,
+  margin : Double,
+  screen_qa~ : Bool = true,
+  min_coverage~ : Double = 0.0,
+  land_only~ : Bool = false,
+) -> NdviThresholdBounds raise AuditError {
+  let lower = threshold - margin
+  let upper = threshold + margin
+  if !(margin >= 0.0 && lower > -1.0 && upper < 1.0) {
+    raise Invalid(
+      "NDVI margin must be nonnegative, with both endpoints inside (-1, 1)",
+    )
+  }
+  let cuts = if margin == 0.0 { [threshold] } else { [lower, threshold, upper] }
+  let matrix = ndvi_transitions(
+    before,
+    after,
+    cuts,
+    screen_qa~,
+    min_coverage~,
+    land_only~,
+  )
+  let nominal = cuts.length() / 2
+  let last_band = cuts.length()
+  let mut observed_up = 0
+  let mut observed_down = 0
+  let mut possible_up = 0
+  let mut possible_down = 0
+  for i in 0..<matrix.counts.length() {
+    for j in 0..<matrix.counts.length() {
+      let count = matrix.counts[i][j]
+      if i <= nominal && j > nominal {
+        observed_up += count
+      } else if i > nominal && j <= nominal {
+        observed_down += count
+      }
+      if i < last_band && j > 0 {
+        possible_up += count
+      }
+      if j < last_band && i > 0 {
+        possible_down += count
+      }
+    }
+  }
+  {
+    threshold,
+    margin,
+    up: {
+      guaranteed: matrix.counts[0][last_band],
+      observed: observed_up,
+      possible: possible_up,
+    },
+    down: {
+      guaranteed: matrix.counts[last_band][0],
+      observed: observed_down,
+      possible: possible_down,
+    },
+    valid: matrix.valid,
+    excluded: matrix.excluded,
+    water_excluded: matrix.water_excluded,
+    qa_screened: matrix.qa_screened,
+    land_only: matrix.land_only,
+    valid_fraction: matrix.valid_fraction,
+  }
+}

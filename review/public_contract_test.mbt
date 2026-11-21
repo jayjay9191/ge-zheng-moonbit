@@ -69,3 +69,45 @@ test "review counts crossings at each cut, including a two-band jump" {
   )
   assert_eq(result.higher + result.lower, 9)
 }
+
+///|
+test "review bounds threshold crossings under observation tolerance" {
+  let before : @lib.Chip = {
+    scene: "review-bounds-before",
+    date: "2024-09-09",
+    epsg: 32650,
+    x: 300000,
+    y: 3500000,
+    width: 4,
+    height: 1,
+    cell: 30,
+    red: [20000, 20000, 20000, 20000],
+    nir: [16000, 19999, 20001, 24000],
+    qa: [0, 0, 0, 0],
+    saturation: [0, 0, 0, 0],
+  }
+  let after = {
+    ..before,
+    scene: "review-bounds-after",
+    date: "2024-09-25",
+    nir: [24000, 24000, 19999, 16000],
+  }
+  let bounds = @lib.ndvi_threshold_bounds(before, after, 0.0, 0.01)
+  assert_eq(
+    (bounds.up.guaranteed, bounds.up.observed, bounds.up.possible),
+    (1, 2, 3),
+  )
+  assert_eq(
+    (bounds.down.guaranteed, bounds.down.observed, bounds.down.possible),
+    (1, 2, 2),
+  )
+  let fixed = @lib.ndvi_threshold_bounds(before, after, 0.0, 0.0)
+  assert_eq(
+    (fixed.up.guaranteed, fixed.up.observed, fixed.up.possible),
+    (2, 2, 2),
+  )
+  let invalid = Ok(@lib.ndvi_threshold_bounds(before, after, 0.99, 0.02)) catch {
+    err => Err(err)
+  }
+  assert_true(invalid is Err(_))
+}

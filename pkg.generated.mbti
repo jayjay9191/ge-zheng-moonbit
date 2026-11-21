@@ -17,6 +17,8 @@ pub fn inspect_pixel(Chip, Chip, Audit, Int32, Int32) -> PixelEvidence raise Aud
 
 pub fn inspect_sources(Chip, Chip, Double, Int32, Int32, screen_qa? : Bool, min_coverage? : Double) -> PixelEvidence raise AuditError
 
+pub fn ndvi_threshold_bounds(Chip, Chip, Double, Double, screen_qa? : Bool, min_coverage? : Double, land_only? : Bool) -> NdviThresholdBounds raise AuditError
+
 pub fn ndvi_transitions(Chip, Chip, Array[Double], screen_qa? : Bool, min_coverage? : Double, land_only? : Bool) -> NdviTransitions raise AuditError
 
 pub fn parse_chip(String) -> Chip raise
@@ -127,6 +129,13 @@ pub(all) struct NdviBandChange {
 pub fn NdviBandChange::to_json(Self) -> @json.Json
 
 #derive(@json.ToJson)
+pub(all) struct NdviCountBounds {
+  guaranteed : Int32
+  observed : Int32
+  possible : Int32
+}
+
+#derive(@json.ToJson)
 pub(all) struct NdviCutCrossing {
   threshold : Double
   up : Int32
@@ -134,6 +143,21 @@ pub(all) struct NdviCutCrossing {
   net : Int32
 }
 pub fn NdviCutCrossing::to_json(Self) -> @json.Json
+
+#derive(@json.ToJson)
+pub(all) struct NdviThresholdBounds {
+  threshold : Double
+  margin : Double
+  up : NdviCountBounds
+  down : NdviCountBounds
+  valid : Int32
+  excluded : Int32
+  water_excluded : Int32
+  qa_screened : Bool
+  land_only : Bool
+  valid_fraction : Double
+}
+pub fn NdviThresholdBounds::to_json(Self) -> @json.Json
 
 #derive(@json.ToJson)
 pub(all) struct NdviTransitionSummary {

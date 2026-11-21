@@ -20,7 +20,7 @@ fn main {
   let start = if args.length() > 2 && args[2] == "--" { 3 } else { 2 }
   if args.length() < start + 3 {
     println(
-      "Usage: moon run cmd/main -- <before.json> <after.json> <NDVI threshold | --transitions <cuts>] [--direct] [--min-coverage <fraction>] [--inspect <row> <column> | --summary | --sweep [0.10,0.15,0.20] | --qa-impact | --tiles 2x2 | --regions [4|8] [--min-region-pixels <pixels>] [--land-only]]",
+      "Usage: moon run cmd/main -- <before.json> <after.json> <NDVI threshold | --transitions <cuts> [--margin <NDVI tolerance>]] [--direct] [--min-coverage <fraction>] [--inspect <row> <column> | --summary | --sweep [0.10,0.15,0.20] | --qa-impact | --tiles 2x2 | --regions [4|8] [--min-region-pixels <pixels>] [--land-only]]",
     )
     @env.exit(2)
   }
@@ -45,6 +45,7 @@ fn main {
     let mut land_only = false
     let mut tiles : (Int32, Int32)? = None
     let mut transition : Array[Double]? = None
+    let mut margin : Double? = None
     let mut index = start + (if transition_mode { 2 } else { 3 })
     let seen : Map[String, Bool] = Map([])
     while index < args.length() {
@@ -94,6 +95,13 @@ fn main {
             cuts.push(@json.from_json(@json.parse(value.to_owned())))
           }
           transition = Some(cuts)
+        }
+        "--margin" => {
+          index += 1
+          if index >= args.length() {
+            fail("--margin requires an NDVI tolerance")
+          }
+          margin = Some(@json.from_json(@json.parse(args[index])))
         }
         "--tiles" => {
           index += 1
@@ -151,19 +159,45 @@ fn main {
     if land_only && regions is None && transition is None {
       fail("--land-only requires --regions or --transitions")
     }
+    if margin is Some(_) && transition is None {
+      fail("--margin requires --transitions with one cut")
+    }
     if impact && direct {
       fail("--qa-impact compares both QA policies; do not also select --direct")
     }
     if transition is Some(cuts) {
-      let result = @audit.ndvi_transitions(
-        before,
-        after,
-        cuts,
-        screen_qa=!direct,
-        min_coverage=minimum,
-        land_only~,
-      )
-      let response = @json.ToJson::to_json(result)
+      let response = if margin is Some(tolerance) {
+        if cuts.length() != 1 {
+          fail("--margin requires --transitions with one cut")
+        }
+        @json.ToJson::to_json(
+          @audit.ndvi_threshold_bounds(
+            before,
+            after,
+            cuts[0],
+            tolerance,
+            screen_qa=!direct,
+            min_coverage=minimum,
+            land_only~,
+          ),
+        )
+      } else {
+        let result = @audit.ndvi_transitions(
+          before,
+          after,
+          cuts,
+          screen_qa=!direct,
+          min_coverage=minimum,
+          land_only~,
+        )
+        let response = @json.ToJson::to_json(result)
+        if response is Object(fields) {
+          fields["summary"] = @json.ToJson::to_json(
+            @audit.summarize_ndvi_transitions(result),
+          )
+        }
+        response
+      }
       if response is Object(fields) {
         fields["sources"] = Json::object({
           "first_scene": Json(before.scene),
@@ -172,9 +206,6 @@ fn main {
           "second_date": Json(after.date),
           "epsg": Json(before.epsg),
         })
-        fields["summary"] = @json.ToJson::to_json(
-          @audit.summarize_ndvi_transitions(result),
-        )
       }
       println(response.stringify())
       return
