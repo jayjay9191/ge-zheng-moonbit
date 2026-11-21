@@ -29,7 +29,7 @@ fn main {
   let start = if args.length() > 2 && args[2] == "--" { 3 } else { 2 }
   if args.length() < start + 3 {
     println(
-      "Usage: moon run cmd/main -- <before.json> <after.json> <NDVI threshold | --transitions <cuts> [--margin <NDVI tolerance> [--witness | --verify-witness <file>] | --margins <list> | --critical-margin]] [--direct] [--min-coverage <fraction>] [--inspect <row> <column> | --summary | --sweep [0.10,0.15,0.20] | --qa-impact | --tiles 2x2 | --regions [4|8] [--min-region-pixels <pixels>] [--land-only]]",
+      "Usage: moon run cmd/main -- <before.json> <after.json> <NDVI threshold | --transitions <cuts> [--margin <NDVI tolerance> [--witness | --verify-witness <file>] | --margins <list> | --critical-margin | --pair-budget <count>]] [--direct] [--min-coverage <fraction>] [--inspect <row> <column> | --summary | --sweep [0.10,0.15,0.20] | --qa-impact | --tiles 2x2 | --regions [4|8] [--min-region-pixels <pixels>] [--land-only]]",
     )
     @env.exit(2)
   }
@@ -57,6 +57,7 @@ fn main {
     let mut margin : Double? = None
     let mut margins : Array[Double]? = None
     let mut critical_margin = false
+    let mut pair_budget : Int32? = None
     let mut witness = false
     let mut verify_witness : String? = None
     let mut index = start + (if transition_mode { 2 } else { 3 })
@@ -71,6 +72,13 @@ fn main {
         "--direct" => direct = true
         "--land-only" => land_only = true
         "--critical-margin" => critical_margin = true
+        "--pair-budget" => {
+          index += 1
+          if index >= args.length() {
+            fail("--pair-budget requires a nonnegative integer")
+          }
+          pair_budget = Some(@json.from_json(@json.parse(args[index])))
+        }
         "--witness" => witness = true
         "--verify-witness" => {
           index += 1
@@ -201,6 +209,17 @@ fn main {
     if witness && verify_witness is Some(_) {
       fail("choose only one of --witness and --verify-witness")
     }
+    if pair_budget is Some(_) &&
+      (
+        transition is None ||
+        critical_margin ||
+        margin is Some(_) ||
+        margins is Some(_)
+      ) {
+      fail(
+        "--pair-budget requires --transitions with one cut and no other margin option",
+      )
+    }
     if critical_margin {
       if transition is None {
         fail("--critical-margin requires --transitions with one cut")
@@ -213,7 +232,22 @@ fn main {
       fail("--qa-impact compares both QA policies; do not also select --direct")
     }
     if transition is Some(cuts) {
-      let response = if critical_margin {
+      let response = if pair_budget is Some(budget) {
+        if cuts.length() != 1 {
+          fail("--pair-budget requires --transitions with one cut")
+        }
+        Json(
+          @audit.ndvi_budget_margin(
+            before,
+            after,
+            cuts[0],
+            budget,
+            screen_qa=!direct,
+            min_coverage=minimum,
+            land_only~,
+          ),
+        )
+      } else if critical_margin {
         if cuts.length() != 1 {
           fail("--critical-margin requires --transitions with one cut")
         }

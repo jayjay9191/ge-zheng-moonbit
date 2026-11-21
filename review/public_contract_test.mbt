@@ -319,3 +319,35 @@ test "review rejects a repeated cell, forbidden flip and wrong coverage in an ex
     is Err(NonMinimal(0)),
   )
 }
+
+///|
+test "review scarce pairs increase the neutralization margin" {
+  let (a, b) = review_threshold_pair()
+  let before = {
+    ..a,
+    width: 3,
+    red: [20000, 20000, 20000],
+    nir: [20001, 20100, 16000],
+    qa: [0, 0, 0],
+    saturation: [0, 0, 0],
+  }
+  let after = {
+    ..b,
+    width: 3,
+    red: [20000, 20000, 20000],
+    nir: [16000, 19800, 19999],
+    qa: [0, 0, 0],
+    saturation: [0, 0, 0],
+  }
+  let zero = @lib.ndvi_budget_margin(before, after, 0.0, 0)
+  assert_eq(zero.observed_net, -2)
+  assert_true(zero.critical is None)
+  let one = @lib.ndvi_budget_margin(before, after, 0.0, 1).critical.unwrap()
+  let two = @lib.ndvi_budget_margin(before, after, 0.0, 2).critical.unwrap()
+  assert_true(one.margin > two.margin && two.margin > 0.0)
+  assert_true(one.attained && two.attained)
+  assert_eq(
+    two.margin,
+    @lib.ndvi_critical_margin(before, after, 0.0).margin_infimum,
+  )
+}

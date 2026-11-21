@@ -74,6 +74,38 @@ def reference_critical_margin(pairs, threshold):
     return observed, radius, can_reach_zero(radius, False)
 
 
+def reference_budget_boundary(pairs, threshold, budget):
+    observed = sum(int(b >= threshold) - int(a >= threshold) for a, b in pairs)
+    if observed == 0:
+        return Fraction(0), True
+    if 2 * budget < abs(observed):
+        return None
+    radii = sorted({abs(value - threshold) for pair in pairs for value in pair})
+
+    def reachable(radius, immediately_above):
+        low, high = threshold - radius, threshold + radius
+
+        def still_upper(value):
+            return value > high if immediately_above else value >= high
+
+        if observed < 0:
+            gains = (int(b >= low) - int(still_upper(a)) - int(b >= threshold) + int(a >= threshold)
+                     for a, b in pairs)
+        else:
+            gains = (int(b >= threshold) - int(a >= threshold) - int(still_upper(b)) + int(a >= low)
+                     for a, b in pairs)
+        return sum(sorted(gains, reverse=True)[:budget]) >= abs(observed)
+
+    lo, hi = 0, len(radii)
+    while lo < hi:
+        mid = (lo + hi) // 2
+        if reachable(radii[mid], True):
+            hi = mid
+        else:
+            lo = mid + 1
+    return None if lo == len(radii) else (radii[lo], reachable(radii[lo], False))
+
+
 def region_reference(classes, width, code, connectivity, minimum):
     remaining = {divmod(i, width) for i, value in enumerate(classes) if value == code}
     pixels = len(remaining)
@@ -393,6 +425,27 @@ def main():
                 assert analytical["zero_possible_at_infimum"] is attained
                 if not flags and not extra:
                     print(f"PASS {folder} critical margin: {float(radius):.10f}, inclusive: {attained}")
+                    if folder == "data/feidong":
+                        budgets = (161, 162, 276, 323)
+                        for cap in budgets:
+                            report = run_pair(paths, "0.5", "--pair-budget", str(cap), threshold="--transitions")
+                            assert (report["observed_net"], report["pair_budget"]) == (nominal, cap)
+                            expected = reference_budget_boundary(pairs, bound_cut, cap)
+                            actual = report.get("critical")
+                            if expected is None:
+                                assert actual is None
+                            else:
+                                assert abs(actual["margin"] - float(expected[0])) < 1e-12
+                                assert actual["attained"] == expected[1]
+                            print(f"PASS pair budget {cap}: {actual}")
+                            if cap == 162:
+                                below, above = (run_pair(paths, "0.5", "--margin", str(actual["margin"] + offset),
+                                                         threshold="--transitions")["neutralization"]["minimum_changed_pairs"]
+                                                for offset in (-1e-9, 1e-9))
+                                assert (below is None or below > cap) and above == cap
+                        run_pair(paths, "0.5", "--pair-budget", "-1", threshold="--transitions", success=False)
+                        run_pair(paths, "0.3,0.5", "--pair-budget", "162", threshold="--transitions", success=False)
+                        run_pair(paths, "0.5", "--pair-budget", "162", "--margin", "0.02", threshold="--transitions", success=False)
                 expected = []
                 for value in text_margins.split(","):
                     tolerance = Fraction(value)

@@ -560,16 +560,7 @@ pub fn ndvi_critical_margin(
   } else {
     let events = if observed_net < 0 { increase } else { decrease }
     let needed = if observed_net < 0 { -observed_net } else { observed_net }
-    events.sort_by((a, b) => {
-      let by_distance = a.0.compare(b.0)
-      if by_distance != 0 || a.1 == b.1 {
-        by_distance
-      } else if a.1 {
-        -1
-      } else {
-        1
-      }
-    })
+    events.sort_by(compare_flip_margins)
     events[needed - 1]
   }
   {
@@ -805,4 +796,111 @@ pub fn verify_ndvi_witness(
     final_net,
     changed_pairs: witness.length(),
   })
+}
+
+///|
+fn compare_flip_margins(a : (Double, Bool), b : (Double, Bool)) -> Int32 {
+  let by_distance = a.0.compare(b.0)
+  if by_distance != 0 || a.1 == b.1 {
+    by_distance
+  } else if a.1 {
+    -1
+  } else {
+    1
+  }
+}
+
+///|
+#derive(ToJson)
+pub(all) struct NdviBudgetBoundary {
+  margin : Double
+  attained : Bool
+}
+
+///|
+#derive(ToJson)
+pub(all) struct NdviBudgetMargin {
+  observed_net : Int32
+  pair_budget : Int32
+  critical : NdviBudgetBoundary?
+}
+
+///|
+/// Sweep distance events while tracking how many distinct pairs supply one
+/// step or two. Endpoint equality is processed before strict downward flips.
+/// The boundary is theoretical, as in ndvi_critical_margin.
+pub fn ndvi_budget_margin(
+  before : Chip,
+  after : Chip,
+  threshold : Double,
+  pair_budget : Int32,
+  screen_qa~ : Bool = true,
+  min_coverage~ : Double = 0.0,
+  land_only~ : Bool = false,
+) -> NdviBudgetMargin raise AuditError {
+  if pair_budget < 0 {
+    raise Invalid("pair budget must be nonnegative")
+  }
+  validate_ndvi_cut_points([threshold])
+  let mut observed_net = 0
+  let mut pair = 0
+  // ponytail: sort the at-most-two events per pair in memory; compact
+  // event storage would be worthwhile for substantially larger chips.
+  let increase : Array[(Double, Bool, Int32)] = []
+  let decrease : Array[(Double, Bool, Int32)] = []
+  ignore(
+    visit_ndvi_pairs(before, after, screen_qa, land_only, min_coverage, (
+      _,
+      _,
+      a,
+      b,
+    ) => {
+      if a >= threshold {
+        observed_net -= 1
+        increase.push((a - threshold, false, pair))
+      } else {
+        decrease.push((threshold - a, true, pair))
+      }
+      if b >= threshold {
+        observed_net += 1
+        decrease.push((b - threshold, false, pair))
+      } else {
+        increase.push((threshold - b, true, pair))
+      }
+      pair += 1
+    }),
+  )
+  if observed_net == 0 {
+    return {
+      observed_net,
+      pair_budget,
+      critical: Some({ margin: 0.0, attained: true, }),
+    }
+  }
+  let needed = observed_net.abs()
+  if pair_budget < (needed + 1) / 2 {
+    return { observed_net, pair_budget, critical: None, }
+  }
+  let events = if observed_net < 0 { increase } else { decrease }
+  events.sort_by((a, b) => compare_flip_margins((a.0, a.1), (b.0, b.1)))
+  let active = Array::make(pair, false)
+  let mut active_pairs = 0
+  let mut double_pairs = 0
+  for event in events {
+    if active[event.2] {
+      double_pairs += 1
+    } else {
+      active[event.2] = true
+      active_pairs += 1
+    }
+    // Fill the budget with the strongest pairs. A double also allows one step.
+    if active_pairs.min(pair_budget) + double_pairs.min(pair_budget) >= needed {
+      return {
+        observed_net,
+        pair_budget,
+        critical: Some({ margin: event.0, attained: event.1, }),
+      }
+    }
+  }
+  { observed_net, pair_budget, critical: None, }
 }
