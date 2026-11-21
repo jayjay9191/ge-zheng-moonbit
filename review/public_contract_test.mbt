@@ -200,3 +200,32 @@ test "review critical tolerance distinguishes a strict endpoint from an inclusiv
     (1, inclusive.margin_infimum, true),
   )
 }
+
+///|
+test "review neutralization counts paired pixels rather than date observations" {
+  let (a, b) = review_threshold_pair()
+  let before = {
+    ..a,
+    width: 2,
+    red: [20000, 20000],
+    nir: [20001, 24000],
+    qa: [0, 0],
+    saturation: [0, 0],
+  }
+  let after = {
+    ..b,
+    width: 2,
+    red: [20000, 20000],
+    nir: [19999, 16000],
+    qa: [0, 0],
+    saturation: [0, 0],
+  }
+  let result = @lib.ndvi_threshold_bounds(before, after, 0.0, 0.01)
+  assert_eq(result.net.observed, -2)
+  assert_eq(result.neutralization.double_step_pairs, 1)
+  assert_eq(result.neutralization.minimum_changed_pairs, Some(1))
+  let fixed = @lib.ndvi_threshold_bounds(before, after, 0.0, 0.0)
+  assert_true(fixed.neutralization.minimum_changed_pairs is None)
+  let reverse = @lib.ndvi_threshold_bounds(after, before, 0.0, 0.01)
+  assert_eq(reverse.neutralization.minimum_changed_pairs, Some(1))
+}

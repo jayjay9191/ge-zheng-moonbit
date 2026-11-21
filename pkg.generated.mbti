@@ -191,12 +191,20 @@ pub(all) struct NdviNetBounds {
 }
 
 #derive(@json.ToJson)
+pub(all) struct NdviNeutralization {
+  single_step_pairs : Int32
+  double_step_pairs : Int32
+  minimum_changed_pairs : Int32?
+}
+
+#derive(@json.ToJson)
 pub(all) struct NdviThresholdBounds {
   threshold : Double
   margin : Double
   up : NdviCountBounds
   down : NdviCountBounds
   net : NdviNetBounds
+  neutralization : NdviNeutralization
   valid : Int32
   excluded : Int32
   water_excluded : Int32

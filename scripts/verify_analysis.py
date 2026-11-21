@@ -2,6 +2,7 @@
 from bisect import bisect_left, bisect_right
 from collections import Counter
 from fractions import Fraction
+from itertools import accumulate, product
 import json
 from pathlib import Path
 import subprocess
@@ -26,6 +27,23 @@ def run_pair(paths, *flags, success=True, threshold="0.15"):
     )
     assert result.returncode == (0 if success else 2), (result.stdout + result.stderr)[:600]
     return json.loads(result.stdout) if success else result.stdout
+
+
+def reference_neutralization(pairs, cut, margin):
+    nominal = sum(int(b >= cut) - int(a >= cut) for a, b in pairs)
+    if not nominal:
+        return dict(single_step_pairs=0, double_step_pairs=0, minimum_changed_pairs=0)
+    direction = 1 if nominal < 0 else -1
+    capacities = []
+    for a, b in pairs:
+        start = int(b >= cut) - int(a >= cut)
+        capacities.append(max(direction * (int(right >= cut) - int(left >= cut) - start)
+                              for left, right in product((a - margin, a + margin), (b - margin, b + margin))))
+    # Check the first prefix whose total capacity covers the deficit.
+    minimum = next((count for count, reach in enumerate(accumulate(sorted(capacities, reverse=True)), 1)
+                    if reach >= abs(nominal)), None)
+    return dict(single_step_pairs=capacities.count(1), double_step_pairs=capacities.count(2),
+                minimum_changed_pairs=minimum)
 
 
 def reference_critical_margin(pairs, threshold):
@@ -303,6 +321,15 @@ def main():
                                                              (-value for value in reversed(net))))
                     print(f"PASS {folder} threshold 0.5 +/- 0.01: up {bounds[0]}, down {bounds[1]}, net {net}")
             for extra, pairs in (((), paired), (("--land-only",), land_pairs)):
+                for tolerance in ("0.01", "0.02"):
+                    neutral = run_pair(paths, "0.5", "--margin", tolerance, *flags, *extra,
+                                       threshold="--transitions")["neutralization"]
+                    oracle = reference_neutralization(pairs, bound_cut, Fraction(tolerance))
+                    assert neutral.get("minimum_changed_pairs") == oracle["minimum_changed_pairs"]
+                    for key in ("single_step_pairs", "double_step_pairs"):
+                        assert neutral[key] == oracle[key]
+                    if not flags and not extra:
+                        print(f"PASS {folder} neutralization at {tolerance}: {oracle}")
                 text_margins = "0,0.01,0.02,0.05"
                 tested = run_pair(paths, "0.5", "--margins", text_margins, *flags, *extra,
                                   threshold="--transitions")

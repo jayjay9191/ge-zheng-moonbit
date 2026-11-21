@@ -256,12 +256,21 @@ pub(all) struct NdviNetBounds {
 
 ///|
 #derive(ToJson)
+pub(all) struct NdviNeutralization {
+  single_step_pairs : Int32
+  double_step_pairs : Int32
+  minimum_changed_pairs : Int32?
+}
+
+///|
+#derive(ToJson)
 pub(all) struct NdviThresholdBounds {
   threshold : Double
   margin : Double
   up : NdviCountBounds
   down : NdviCountBounds
   net : NdviNetBounds
+  neutralization : NdviNeutralization
   valid : Int32
   excluded : Int32
   water_excluded : Int32
@@ -307,6 +316,8 @@ pub fn ndvi_threshold_bounds(
   let mut observed_down = 0
   let mut possible_up = 0
   let mut possible_down = 0
+  let mut double_increase = 0
+  let mut double_decrease = 0
   for i in 0..<matrix.counts.length() {
     for j in 0..<matrix.counts.length() {
       let count = matrix.counts[i][j]
@@ -321,10 +332,37 @@ pub fn ndvi_threshold_bounds(
       if j < last_band && i > 0 {
         possible_down += count
       }
+      if i > nominal && i < last_band && j > 0 && j <= nominal {
+        double_increase += count
+      }
+      if j > nominal && j < last_band && i > 0 && i <= nominal {
+        double_decrease += count
+      }
     }
   }
   let guaranteed_up = matrix.counts[0][last_band]
   let guaranteed_down = matrix.counts[last_band][0]
+  let net : NdviNetBounds = {
+    minimum: guaranteed_up - possible_down,
+    observed: observed_up - observed_down,
+    maximum: possible_up - guaranteed_down,
+  }
+  let (needed, capacity, double_step_pairs) = if net.observed < 0 {
+    (-net.observed, net.maximum - net.observed, double_increase)
+  } else if net.observed > 0 {
+    (net.observed, net.observed - net.minimum, double_decrease)
+  } else {
+    (0, 0, 0)
+  }
+  // A two-step pair can contribute either one or two steps. Use it first.
+  let half = (needed + 1) / 2
+  let minimum_changed_pairs = if needed > capacity {
+    None
+  } else if half <= double_step_pairs {
+    Some(half)
+  } else {
+    Some(needed - double_step_pairs)
+  }
   {
     threshold,
     margin,
@@ -338,12 +376,11 @@ pub fn ndvi_threshold_bounds(
       observed: observed_down,
       possible: possible_down,
     },
-    // The net is (after above cut) minus (before above cut).
-    // Extremes are attainable by moving the dates in opposite directions.
-    net: {
-      minimum: guaranteed_up - possible_down,
-      observed: observed_up - observed_down,
-      maximum: possible_up - guaranteed_down,
+    net,
+    neutralization: {
+      single_step_pairs: capacity - 2 * double_step_pairs,
+      double_step_pairs,
+      minimum_changed_pairs,
     },
     valid: matrix.valid,
     excluded: matrix.excluded,
