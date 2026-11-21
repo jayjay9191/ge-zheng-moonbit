@@ -333,3 +333,110 @@ pub fn ndvi_threshold_bounds(
     valid_fraction: matrix.valid_fraction,
   }
 }
+
+///|
+#derive(ToJson)
+pub(all) struct NdviMarginRow {
+  margin : Double
+  net : NdviNetBounds
+}
+
+///|
+#derive(ToJson)
+pub(all) struct NdviMarginSweep {
+  threshold : Double
+  rows : Array[NdviMarginRow]
+  first_inconclusive_margin : Double?
+  valid : Int32
+  excluded : Int32
+  water_excluded : Int32
+  qa_screened : Bool
+  land_only : Bool
+  valid_fraction : Double
+}
+
+///|
+pub extend NdviMarginSweep with @json.ToJson::{to_json}
+
+///|
+/// Build one matrix for the cut and all tolerance endpoints, then reuse its marginal
+/// counts. The reported first inconclusive margin is taken from the requested grid.
+pub fn ndvi_margin_sweep(
+  before : Chip,
+  after : Chip,
+  threshold : Double,
+  margins : Array[Double],
+  screen_qa~ : Bool = true,
+  min_coverage~ : Double = 0.0,
+  land_only~ : Bool = false,
+) -> NdviMarginSweep raise AuditError {
+  if margins.is_empty() || margins.length() > 7 {
+    raise Invalid("NDVI margin sweep requires 1 to 7 margins")
+  }
+  let mut previous = -1.0
+  let lower_cuts : Array[Double] = []
+  let upper_cuts : Array[Double] = []
+  for margin in margins {
+    if !(margin >= 0.0 && margin > previous) {
+      raise Invalid(
+        "NDVI sweep margins must strictly increase from zero or greater",
+      )
+    }
+    if margin > 0.0 {
+      lower_cuts.push(threshold - margin)
+      upper_cuts.push(threshold + margin)
+    }
+    previous = margin
+  }
+  let center = lower_cuts.length()
+  let cuts = lower_cuts.rev() + [threshold] + upper_cuts
+  let matrix = ndvi_transitions(
+    before,
+    after,
+    cuts,
+    screen_qa~,
+    min_coverage~,
+    land_only~,
+  )
+  let summary = summarize_ndvi_transitions(matrix)
+  let before_above = Array::make(cuts.length(), 0)
+  let after_above = Array::make(cuts.length(), 0)
+  let mut before_count = 0
+  let mut after_count = 0
+  for offset in 0..<cuts.length() {
+    let i = cuts.length() - 1 - offset
+    before_count += summary.before_counts[i + 1]
+    after_count += summary.after_counts[i + 1]
+    before_above[i] = before_count
+    after_above[i] = after_count
+  }
+  let mut offset = 0
+  let observed = after_above[center] - before_above[center]
+  let rows : Array[NdviMarginRow] = margins.map(margin => {
+    if margin > 0.0 {
+      offset += 1
+    }
+    {
+      margin,
+      net: {
+        minimum: after_above[center + offset] - before_above[center - offset],
+        observed,
+        maximum: after_above[center - offset] - before_above[center + offset],
+      },
+    }
+  })
+  {
+    threshold,
+    rows,
+    first_inconclusive_margin: rows
+    .iter()
+    .find_first(row => row.net.minimum <= 0 && row.net.maximum >= 0)
+    .map(row => row.margin),
+    valid: matrix.valid,
+    excluded: matrix.excluded,
+    water_excluded: matrix.water_excluded,
+    qa_screened: matrix.qa_screened,
+    land_only: matrix.land_only,
+    valid_fraction: matrix.valid_fraction,
+  }
+}

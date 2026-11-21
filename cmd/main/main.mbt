@@ -15,12 +15,21 @@ fn load_chip(path : String) -> @audit.Chip raise {
 }
 
 ///|
+fn parse_thresholds(raw : String) -> Array[Double] raise {
+  let values = []
+  for item in raw.split(",") {
+    values.push(@json.from_json(@json.parse(item.to_owned())))
+  }
+  values
+}
+
+///|
 fn main {
   let args = @env.args()
   let start = if args.length() > 2 && args[2] == "--" { 3 } else { 2 }
   if args.length() < start + 3 {
     println(
-      "Usage: moon run cmd/main -- <before.json> <after.json> <NDVI threshold | --transitions <cuts> [--margin <NDVI tolerance>]] [--direct] [--min-coverage <fraction>] [--inspect <row> <column> | --summary | --sweep [0.10,0.15,0.20] | --qa-impact | --tiles 2x2 | --regions [4|8] [--min-region-pixels <pixels>] [--land-only]]",
+      "Usage: moon run cmd/main -- <before.json> <after.json> <NDVI threshold | --transitions <cuts> [--margin <NDVI tolerance> | --margins <list>]] [--direct] [--min-coverage <fraction>] [--inspect <row> <column> | --summary | --sweep [0.10,0.15,0.20] | --qa-impact | --tiles 2x2 | --regions [4|8] [--min-region-pixels <pixels>] [--land-only]]",
     )
     @env.exit(2)
   }
@@ -46,6 +55,7 @@ fn main {
     let mut tiles : (Int32, Int32)? = None
     let mut transition : Array[Double]? = None
     let mut margin : Double? = None
+    let mut margins : Array[Double]? = None
     let mut index = start + (if transition_mode { 2 } else { 3 })
     let seen : Map[String, Bool] = Map([])
     while index < args.length() {
@@ -90,11 +100,7 @@ fn main {
           if index >= args.length() {
             fail("--transitions requires comma-separated NDVI cut points")
           }
-          let cuts : Array[Double] = []
-          for value in args[index].split(",") {
-            cuts.push(@json.from_json(@json.parse(value.to_owned())))
-          }
-          transition = Some(cuts)
+          transition = Some(parse_thresholds(args[index]))
         }
         "--margin" => {
           index += 1
@@ -102,6 +108,13 @@ fn main {
             fail("--margin requires an NDVI tolerance")
           }
           margin = Some(@json.from_json(@json.parse(args[index])))
+        }
+        "--margins" => {
+          index += 1
+          if index >= args.length() {
+            fail("--margins requires comma-separated NDVI tolerances")
+          }
+          margins = Some(parse_thresholds(args[index]))
         }
         "--tiles" => {
           index += 1
@@ -162,11 +175,34 @@ fn main {
     if margin is Some(_) && transition is None {
       fail("--margin requires --transitions with one cut")
     }
+    if margins is Some(_) {
+      if transition is None {
+        fail("--margins requires --transitions with one cut")
+      }
+      if margin is Some(_) {
+        fail("choose only one of --margin and --margins")
+      }
+    }
     if impact && direct {
       fail("--qa-impact compares both QA policies; do not also select --direct")
     }
     if transition is Some(cuts) {
-      let response = if margin is Some(tolerance) {
+      let response = if margins is Some(tolerances) {
+        if cuts.length() != 1 {
+          fail("--margins requires --transitions with one cut")
+        }
+        @json.ToJson::to_json(
+          @audit.ndvi_margin_sweep(
+            before,
+            after,
+            cuts[0],
+            tolerances,
+            screen_qa=!direct,
+            min_coverage=minimum,
+            land_only~,
+          ),
+        )
+      } else if margin is Some(tolerance) {
         if cuts.length() != 1 {
           fail("--margin requires --transitions with one cut")
         }

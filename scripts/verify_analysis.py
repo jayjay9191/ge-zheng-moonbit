@@ -139,6 +139,8 @@ def main():
     assert "requires --transitions" in run("data/feidong", "--margin", "0.01", success=False)
     assert "requires --transitions" in run("data/feidong", "0.2,0.5", "--margin", "0.01",
                                           threshold="--transitions", success=False)
+    assert "choose only one" in run("data/feidong", "0.5", "--margins", "0,0.01", "--margin", "0.01",
+                                    threshold="--transitions", success=False)
     compared = 0
     max_error = 0.0
     for folder, (gains, losses, valid, excluded, changed_before, changed_after) in expected.items():
@@ -155,6 +157,8 @@ def main():
             land_bounds = [[0] * 3 for _ in range(2)]
             signed = [0, 0, 0]
             land_signed = [0, 0, 0]
+            paired = []
+            land_pairs = []
             land_cut_counts = [[0, 0] for _ in cuts]
             common = first.keys() & second.keys()
             for point in common:
@@ -164,8 +168,10 @@ def main():
                     row, column = bisect_right(cuts, a), bisect_right(cuts, b)
                     expected_transitions[row][column] += 1
                     is_land = not (before["qa"][first[point]] & 128 or after["qa"][second[point]] & 128)
+                    paired.append((a, b))
                     if is_land:
                         expected_land[row][column] += 1
+                        land_pairs.append((a, b))
                     for i, cut in enumerate(cuts):
                         up, down = a < cut <= b, b < cut <= a
                         cut_counts[i][0] += up
@@ -268,6 +274,26 @@ def main():
                     assert reverse_bounds["net"] == dict(zip(("minimum", "observed", "maximum"),
                                                              (-value for value in reversed(net))))
                     print(f"PASS {folder} threshold 0.5 +/- 0.01: up {bounds[0]}, down {bounds[1]}, net {net}")
+            for extra, pairs in (((), paired), (("--land-only",), land_pairs)):
+                text_margins = "0,0.01,0.02,0.05"
+                tested = run_pair(paths, "0.5", "--margins", text_margins, *flags, *extra,
+                                  threshold="--transitions")
+                assert tested["valid"] == len(pairs)
+                expected = []
+                for value in text_margins.split(","):
+                    tolerance = Fraction(value)
+                    net = [
+                        sum(int(b - tolerance >= bound_cut) - int(a + tolerance >= bound_cut) for a, b in pairs),
+                        sum(int(b >= bound_cut) - int(a >= bound_cut) for a, b in pairs),
+                        sum(int(b + tolerance >= bound_cut) - int(a - tolerance >= bound_cut) for a, b in pairs),
+                    ]
+                    expected.append(dict(margin=float(value), net=dict(zip(("minimum", "observed", "maximum"), net))))
+                assert tested["rows"] == expected
+                first_uncertain = next((row["margin"] for row in expected
+                                        if row["net"]["minimum"] <= 0 <= row["net"]["maximum"]), None)
+                assert tested.get("first_inconclusive_margin") == first_uncertain
+                if not flags and not extra:
+                    print(f"PASS {folder} margin sweep: {expected}, first inconclusive: {first_uncertain}")
             if not flags:
                 reverse = run_pair(paths[::-1], "0.2,0.5", threshold="--transitions")
                 assert reverse["summary"]["cut_crossings"] == [

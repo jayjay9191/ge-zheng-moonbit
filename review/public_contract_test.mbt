@@ -132,3 +132,19 @@ test "review signed change takes its exact extrema even when both directions are
     (-2, 0, 1),
   )
 }
+
+///|
+test "review locates the first tested tolerance that can erase the direction" {
+  let (before, base) = review_threshold_pair()
+  let after = { ..base, nir: [24000, 24000, 19999, 24000], }
+  let sweep = @lib.ndvi_margin_sweep(before, after, 0.0, [0.0, 0.01])
+  assert_eq(
+    sweep.rows.map(row => (row.net.minimum, row.net.observed, row.net.maximum)),
+    [(1, 1, 1), (0, 1, 3)],
+  )
+  assert_eq(sweep.first_inconclusive_margin, Some(0.01))
+  let invalid = Ok(@lib.ndvi_margin_sweep(before, after, 0.0, [0.01, 0.01])) catch {
+    err => Err(err)
+  }
+  assert_true(invalid is Err(_))
+}
