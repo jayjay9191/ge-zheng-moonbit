@@ -264,3 +264,58 @@ test "review sparse witness names one paired cell and both date flips" {
   assert_true(clipped is Err(_))
   assert_true(@lib.ndvi_neutralization_witness(before, after, 0.0, 0.0) is None)
 }
+
+///|
+test "review rejects a repeated cell, forbidden flip and wrong coverage in an external witness" {
+  let (a, b) = review_threshold_pair()
+  let before = {
+    ..a,
+    width: 2,
+    red: [20000, 20000],
+    nir: [24000, 20001],
+    qa: [0, 0],
+    saturation: [0, 0],
+  }
+  let after = {
+    ..b,
+    width: 2,
+    red: [20000, 20000],
+    nir: [16000, 19999],
+    qa: [0, 0],
+    saturation: [0, 0],
+  }
+  let both : @lib.NdviPairWitness = { row: 0, column: 1, flip: BothDates, }
+  let accepted = @lib.verify_ndvi_witness(before, after, 0.0, 0.01, [both])
+  guard accepted is Ok(audit) else { abort("expected valid minimal witness") }
+  assert_eq(
+    (audit.observed_net, audit.final_net, audit.changed_pairs),
+    (-2, 0, 1),
+  )
+  assert_true(
+    @lib.verify_ndvi_witness(before, after, 0.0, 0.01, [both, both])
+    is Err(RepeatedCell(0, 1)),
+  )
+  assert_true(
+    @lib.verify_ndvi_witness(before, after, 0.0, 0.01, [{ ..both, column: 0, }])
+    is Err(OutsideTolerance(0, 0)),
+  )
+  assert_true(
+    @lib.verify_ndvi_witness(before, after, 0.0, 0.01, [{ ..both, column: 2, }])
+    is Err(OutsideCoverage(0, 2)),
+  )
+  assert_true(
+    @lib.verify_ndvi_witness(before, after, 0.0, 0.01, [
+      { ..both, flip: AfterDate, },
+    ])
+    is Err(NonNeutral(-1)),
+  )
+  let balance_before = { ..before, nir: [20001, 19999], }
+  let balance_after = { ..after, nir: [19999, 20001], }
+  let unnecessary = [both, { ..both, column: 0, }]
+  assert_true(
+    @lib.verify_ndvi_witness(
+      balance_before, balance_after, 0.0, 0.01, unnecessary,
+    )
+    is Err(NonMinimal(0)),
+  )
+}

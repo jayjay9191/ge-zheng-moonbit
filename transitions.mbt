@@ -587,7 +587,7 @@ pub fn ndvi_critical_margin(
 }
 
 ///|
-#derive(ToJson)
+#derive(ToJson, FromJson)
 pub(all) enum NdviPairFlip {
   BeforeDate
   AfterDate
@@ -595,7 +595,7 @@ pub(all) enum NdviPairFlip {
 }
 
 ///|
-#derive(ToJson)
+#derive(ToJson, FromJson)
 pub(all) struct NdviPairWitness {
   row : Int32
   column : Int32
@@ -688,4 +688,121 @@ pub fn ndvi_neutralization_witness(
     }),
   )
   Some(double_changes + single_changes)
+}
+
+///|
+#derive(ToJson)
+pub(all) enum NdviWitnessFailure {
+  RepeatedCell(Int32, Int32)
+  OutsideCoverage(Int32, Int32)
+  OutsideTolerance(Int32, Int32)
+  NonNeutral(Int32)
+  NonMinimal(Int32)
+}
+
+///|
+#derive(ToJson)
+pub(all) struct NdviWitnessAudit {
+  observed_net : Int32
+  final_net : Int32
+  changed_pairs : Int32
+}
+
+///|
+/// Verify a caller-provided witness in the first chip's grid, including minimality.
+/// Chip and tolerance validation raise AuditError; witness defects are typed results.
+pub fn verify_ndvi_witness(
+  before : Chip,
+  after : Chip,
+  threshold : Double,
+  margin : Double,
+  witness : Array[NdviPairWitness],
+  screen_qa~ : Bool = true,
+  min_coverage~ : Double = 0.0,
+  land_only~ : Bool = false,
+) -> Result[NdviWitnessAudit, NdviWitnessFailure] raise AuditError {
+  if witness.length() > 4096 {
+    raise Invalid("external witness exceeds 4096 pairs")
+  }
+  let bounds = ndvi_threshold_bounds(
+    before,
+    after,
+    threshold,
+    margin,
+    screen_qa~,
+    min_coverage~,
+    land_only~,
+  )
+  let by_cell : Map[(Int32, Int32), Int32] = Map([])
+  for i, cell in witness {
+    let key = (cell.row, cell.column)
+    if by_cell.contains(key) {
+      return Err(RepeatedCell(cell.row, cell.column))
+    }
+    by_cell[key] = i
+  }
+  let seen = Array::make(witness.length(), false)
+  let deltas : Array[Int32?] = Array::make(witness.length(), None)
+  let lower = threshold - margin
+  let upper = threshold + margin
+  // A selected date can flip iff the half-open uncertainty band contains its measurement.
+  if !witness.is_empty() {
+    ignore(
+      visit_ndvi_pairs(before, after, screen_qa, land_only, min_coverage, (
+        row,
+        column,
+        a,
+        b,
+      ) => {
+        if by_cell.get((row, column)) is Some(i) {
+          seen[i] = true
+          let (flip_a, flip_b) = match witness[i].flip {
+            BeforeDate => (true, false)
+            AfterDate => (false, true)
+            BothDates => (true, true)
+          }
+          if (!flip_a || (a >= lower && a < upper)) &&
+            (!flip_b || (b >= lower && b < upper)) {
+            let delta_a = if !flip_a {
+              0
+            } else if a >= threshold {
+              1
+            } else {
+              -1
+            }
+            let delta_b = if !flip_b {
+              0
+            } else if b >= threshold {
+              -1
+            } else {
+              1
+            }
+            deltas[i] = Some(delta_a + delta_b)
+          }
+        }
+      }),
+    )
+  }
+  let mut final_net = bounds.net.observed
+  for i, cell in witness {
+    if !seen[i] {
+      return Err(OutsideCoverage(cell.row, cell.column))
+    }
+    guard deltas[i] is Some(delta) else {
+      return Err(OutsideTolerance(cell.row, cell.column))
+    }
+    final_net += delta
+  }
+  if final_net != 0 {
+    return Err(NonNeutral(final_net))
+  }
+  if bounds.neutralization.minimum_changed_pairs is Some(minimum) &&
+    witness.length() != minimum {
+    return Err(NonMinimal(minimum))
+  }
+  Ok({
+    observed_net: bounds.net.observed,
+    final_net,
+    changed_pairs: witness.length(),
+  })
 }

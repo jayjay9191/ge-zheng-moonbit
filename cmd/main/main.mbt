@@ -29,7 +29,7 @@ fn main {
   let start = if args.length() > 2 && args[2] == "--" { 3 } else { 2 }
   if args.length() < start + 3 {
     println(
-      "Usage: moon run cmd/main -- <before.json> <after.json> <NDVI threshold | --transitions <cuts> [--margin <NDVI tolerance> [--witness] | --margins <list> | --critical-margin]] [--direct] [--min-coverage <fraction>] [--inspect <row> <column> | --summary | --sweep [0.10,0.15,0.20] | --qa-impact | --tiles 2x2 | --regions [4|8] [--min-region-pixels <pixels>] [--land-only]]",
+      "Usage: moon run cmd/main -- <before.json> <after.json> <NDVI threshold | --transitions <cuts> [--margin <NDVI tolerance> [--witness | --verify-witness <file>] | --margins <list> | --critical-margin]] [--direct] [--min-coverage <fraction>] [--inspect <row> <column> | --summary | --sweep [0.10,0.15,0.20] | --qa-impact | --tiles 2x2 | --regions [4|8] [--min-region-pixels <pixels>] [--land-only]]",
     )
     @env.exit(2)
   }
@@ -58,6 +58,7 @@ fn main {
     let mut margins : Array[Double]? = None
     let mut critical_margin = false
     let mut witness = false
+    let mut verify_witness : String? = None
     let mut index = start + (if transition_mode { 2 } else { 3 })
     let seen : Map[String, Bool] = Map([])
     while index < args.length() {
@@ -71,6 +72,13 @@ fn main {
         "--land-only" => land_only = true
         "--critical-margin" => critical_margin = true
         "--witness" => witness = true
+        "--verify-witness" => {
+          index += 1
+          if index >= args.length() {
+            fail("--verify-witness requires a JSON file")
+          }
+          verify_witness = Some(args[index])
+        }
         "--summary" => summary = true
         "--qa-impact" => impact = true
         "--sweep" => {
@@ -187,8 +195,11 @@ fn main {
         fail("choose only one of --margin and --margins")
       }
     }
-    if witness && margin is None {
-      fail("--witness requires --margin and --transitions")
+    if (witness || verify_witness is Some(_)) && margin is None {
+      fail("--witness and --verify-witness require --margin and --transitions")
+    }
+    if witness && verify_witness is Some(_) {
+      fail("choose only one of --witness and --verify-witness")
     }
     if critical_margin {
       if transition is None {
@@ -235,7 +246,33 @@ fn main {
         if cuts.length() != 1 {
           fail("--margin requires --transitions with one cut")
         }
-        if witness {
+        if verify_witness is Some(path) {
+          let supplied : Array[@audit.NdviPairWitness] = @json.from_json(
+            @json.parse(read_utf8(path)),
+          )
+          match
+            @audit.verify_ndvi_witness(
+              before,
+              after,
+              cuts[0],
+              tolerance,
+              supplied,
+              screen_qa=!direct,
+              min_coverage=minimum,
+              land_only~,
+            ) {
+            Ok(audit) =>
+              Json::object({
+                "valid": Json(true),
+                "audit": @json.ToJson::to_json(audit),
+              })
+            Err(failure) =>
+              Json::object({
+                "valid": Json(false),
+                "failure": @json.ToJson::to_json(failure),
+              })
+          }
+        } else if witness {
           let changes = @audit.ndvi_neutralization_witness(
             before,
             after,

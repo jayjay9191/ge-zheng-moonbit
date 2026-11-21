@@ -365,6 +365,19 @@ def main():
                                     assert low < bound_cut <= high
                                     replay_net += sign * (1 - 2 * int(value >= bound_cut))
                         assert replay_net == 0
+                        if not flags and not extra and witness:
+                            with TemporaryDirectory(prefix="witness-audit-") as folder_path:
+                                proof = Path(folder_path) / "witness.json"
+                                proof.write_text(json.dumps(witness), encoding="utf-8")
+                                check = ("--margin", tolerance, "--verify-witness", str(proof))
+                                verified = run_pair(paths, "0.5", *check, threshold="--transitions")
+                                assert verified["valid"] is True
+                                observed = sum(int(b >= bound_cut) - int(a >= bound_cut) for a, b in pairs)
+                                assert verified["audit"] == dict(observed_net=observed, final_net=0, changed_pairs=minimum)
+                                proof.write_text(json.dumps(witness + witness[:1]), encoding="utf-8")
+                                rejected = run_pair(paths, "0.5", *check, threshold="--transitions")
+                                assert rejected["valid"] is False and "RepeatedCell" in json.dumps(rejected["failure"])
+                                print(f"PASS {len(witness)} pairs verified at {tolerance}; repeated coordinate rejected")
                     if not flags and not extra:
                         print(f"PASS {folder} neutralization at {tolerance}: {oracle}; witness replayed")
                 text_margins = "0,0.01,0.02,0.05"

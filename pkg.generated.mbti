@@ -39,6 +39,8 @@ pub fn tile_counts(Audit, rows? : Int32, columns? : Int32) -> Array[TileCounts] 
 
 pub fn validate_threshold(Double) -> Unit raise AuditError
 
+pub fn verify_ndvi_witness(Chip, Chip, Double, Double, Array[NdviPairWitness], screen_qa? : Bool, min_coverage? : Double, land_only? : Bool) -> Result[NdviWitnessAudit, NdviWitnessFailure] raise AuditError
+
 // Errors
 #derive(@debug.Debug)
 pub suberror AuditError {
@@ -199,14 +201,14 @@ pub(all) struct NdviNeutralization {
   minimum_changed_pairs : Int32?
 }
 
-#derive(@json.ToJson)
+#derive(@json.FromJson, @json.ToJson)
 pub(all) enum NdviPairFlip {
   BeforeDate
   AfterDate
   BothDates
 }
 
-#derive(@json.ToJson)
+#derive(@json.FromJson, @json.ToJson)
 pub(all) struct NdviPairWitness {
   row : Int32
   column : Int32
@@ -257,6 +259,22 @@ pub(all) struct NdviTransitions {
   valid_fraction : Double
 }
 pub fn NdviTransitions::to_json(Self) -> @json.Json
+
+#derive(@json.ToJson)
+pub(all) struct NdviWitnessAudit {
+  observed_net : Int32
+  final_net : Int32
+  changed_pairs : Int32
+}
+
+#derive(@json.ToJson)
+pub(all) enum NdviWitnessFailure {
+  RepeatedCell(Int32, Int32)
+  OutsideCoverage(Int32, Int32)
+  OutsideTolerance(Int32, Int32)
+  NonNeutral(Int32)
+  NonMinimal(Int32)
+}
 
 #derive(@json.ToJson)
 pub(all) struct PixelEvidence {
