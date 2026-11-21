@@ -74,6 +74,20 @@ def reference_critical_margin(pairs, threshold):
     return observed, radius, can_reach_zero(radius, False)
 
 
+def reference_calibration(pairs, threshold, radius):
+    before = sorted(a for a, _ in pairs)
+    after = sorted(b for _, b in pairs)
+    # Re-evaluate both marginal distributions at every distinct cutoff.
+    offsets = {-radius, Fraction(0), radius}
+    offsets.update(threshold - value for values in (before, after) for value in values
+                   if abs(threshold - value) <= radius)
+    def net_at(offset):
+        return bisect_left(before, threshold - offset) - bisect_left(after, threshold - offset)
+    results = [(offset, net_at(offset)) for offset in sorted(offsets)]
+    nets = [net for _, net in results]
+    return min(nets), net_at(0), max(nets), next((offset for offset, value in results if value == 0), None)
+
+
 def reference_budget_boundary(pairs, threshold, budget):
     observed = sum(int(b >= threshold) - int(a >= threshold) for a, b in pairs)
     if observed == 0:
@@ -353,6 +367,19 @@ def main():
                                                              (-value for value in reversed(net))))
                     print(f"PASS {folder} threshold 0.5 +/- 0.01: up {bounds[0]}, down {bounds[1]}, net {net}")
             for extra, pairs in (((), paired), (("--land-only",), land_pairs)):
+                for radius_text in ("0", "0.02"):
+                    radius = Fraction(radius_text)
+                    actual = run_pair(paths, "0.5", "--calibration-margin", radius_text, *flags, *extra,
+                                      threshold="--transitions")
+                    low, nominal, high, zero = reference_calibration(pairs, bound_cut, radius)
+                    assert actual["valid"] == len(pairs)
+                    assert (actual["minimum"], actual["observed_net"], actual["maximum"]) == (low, nominal, high)
+                    if zero is None:
+                        assert actual.get("first_zero_offset") is None
+                    else:
+                        assert abs(actual["first_zero_offset"] - float(zero)) < 1e-12
+                    if not flags and not extra and radius:
+                        print(f"PASS {folder} common calibration +/- {radius_text}: {(low, nominal, high)}, zero={zero}")
                 for tolerance in ("0.01", "0.02"):
                     neutral = run_pair(paths, "0.5", "--margin", tolerance, *flags, *extra,
                                        threshold="--transitions")["neutralization"]
@@ -456,6 +483,9 @@ def main():
                         run_pair(paths, "0.5", "--pair-budget", "162", "--pair-budgets", "162,276",
                                  threshold="--transitions", success=False)
                         print("PASS one sweep preserves seven unordered and repeated budget queries")
+                        run_pair(paths, "0.5", "--calibration-margin", "-0.02", threshold="--transitions", success=False)
+                        run_pair(paths, "0.5", "--calibration-margin", "0.02", "--margin", "0.02",
+                                 threshold="--transitions", success=False)
                         run_pair(paths, "0.5", "--pair-budget", "-1", threshold="--transitions", success=False)
                         run_pair(paths, "0.3,0.5", "--pair-budget", "162", threshold="--transitions", success=False)
                         run_pair(paths, "0.5", "--pair-budget", "162", "--margin", "0.02", threshold="--transitions", success=False)

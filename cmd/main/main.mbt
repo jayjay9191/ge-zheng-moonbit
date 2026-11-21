@@ -29,7 +29,7 @@ fn main {
   let start = if args.length() > 2 && args[2] == "--" { 3 } else { 2 }
   if args.length() < start + 3 {
     println(
-      "Usage: moon run cmd/main -- <before.json> <after.json> <NDVI threshold | --transitions <cuts> [--margin <NDVI tolerance> [--witness | --verify-witness <file>] | --margins <list> | --critical-margin | --pair-budget <count> | --pair-budgets <list>]] [--direct] [--min-coverage <fraction>] [--inspect <row> <column> | --summary | --sweep [0.10,0.15,0.20] | --qa-impact | --tiles 2x2 | --regions [4|8] [--min-region-pixels <pixels>] [--land-only]]",
+      "Usage: moon run cmd/main -- <before.json> <after.json> <NDVI threshold | --transitions <cuts> [--margin <NDVI tolerance> [--witness | --verify-witness <file>] | --margins <list> | --critical-margin | --calibration-margin <tolerance> | --pair-budget <count> | --pair-budgets <list>]] [--direct] [--min-coverage <fraction>] [--inspect <row> <column> | --summary | --sweep [0.10,0.15,0.20] | --qa-impact | --tiles 2x2 | --regions [4|8] [--min-region-pixels <pixels>] [--land-only]]",
     )
     @env.exit(2)
   }
@@ -57,6 +57,7 @@ fn main {
     let mut margin : Double? = None
     let mut margins : Array[Double]? = None
     let mut critical_margin = false
+    let mut calibration_margin : Double? = None
     let mut pair_budget : Int32? = None
     let mut pair_budgets : Array[Int32]? = None
     let mut witness = false
@@ -73,6 +74,13 @@ fn main {
         "--direct" => direct = true
         "--land-only" => land_only = true
         "--critical-margin" => critical_margin = true
+        "--calibration-margin" => {
+          index += 1
+          if index >= args.length() {
+            fail("--calibration-margin requires an NDVI tolerance")
+          }
+          calibration_margin = Some(@json.from_json(@json.parse(args[index])))
+        }
         "--pair-budget" => {
           index += 1
           if index >= args.length() {
@@ -221,6 +229,19 @@ fn main {
     if witness && verify_witness is Some(_) {
       fail("choose only one of --witness and --verify-witness")
     }
+    if calibration_margin is Some(_) &&
+      (
+        transition is None ||
+        critical_margin ||
+        pair_budget is Some(_) ||
+        pair_budgets is Some(_) ||
+        margin is Some(_) ||
+        margins is Some(_)
+      ) {
+      fail(
+        "--calibration-margin requires --transitions and no other margin option",
+      )
+    }
     if pair_budget is Some(_) && pair_budgets is Some(_) {
       fail("choose only one of --pair-budget and --pair-budgets")
     }
@@ -247,7 +268,22 @@ fn main {
       fail("--qa-impact compares both QA policies; do not also select --direct")
     }
     if transition is Some(cuts) {
-      let response = if pair_budgets is Some(budgets) {
+      let response = if calibration_margin is Some(radius) {
+        if cuts.length() != 1 {
+          fail("--calibration-margin requires one cut point")
+        }
+        Json(
+          @audit.ndvi_calibration_bounds(
+            before,
+            after,
+            cuts[0],
+            radius,
+            screen_qa=!direct,
+            min_coverage=minimum,
+            land_only~,
+          ),
+        )
+      } else if pair_budgets is Some(budgets) {
         if cuts.length() != 1 {
           fail("--pair-budgets requires --transitions with one cut")
         }

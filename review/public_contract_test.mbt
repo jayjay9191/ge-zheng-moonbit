@@ -382,3 +382,37 @@ test "review batched budgets preserve order, duplicates and strict endpoints" {
   let balanced = @lib.ndvi_budget_margins(before, before, 0.0, [0, 10])
   assert_true(balanced.all(row => row.critical.unwrap().attained))
 }
+
+///|
+test "review equal calibration events can jump across zero without reaching it" {
+  let (base, next) = review_threshold_pair()
+  let before = {
+    ..base,
+    width: 3,
+    red: [20000, 20000, 20000],
+    nir: [24000, 24000, 16000],
+    qa: [0, 0, 0],
+    saturation: [0, 0, 0],
+  }
+  let after = {
+    ..next,
+    width: 3,
+    red: [20000, 20000, 20000],
+    nir: [24000, 20000, 20000],
+    qa: [0, 0, 0],
+    saturation: [0, 0, 0],
+  }
+  let envelope = @lib.ndvi_calibration_bounds(before, after, 0.0, 0.001)
+  assert_eq(
+    (envelope.minimum, envelope.observed_net, envelope.maximum),
+    (-1, 1, 1),
+  )
+  assert_true(envelope.first_zero_offset is None)
+  let nominal = @lib.ndvi_calibration_bounds(before, after, 0.0, 0.0)
+  assert_eq((nominal.minimum, nominal.maximum), (1, 1))
+  let high = { ..before, red: [8000, 8000, 16000], nir: [24000, 24000, 16000], }
+  let equal = { ..after, red: [8000, 8000, 16000], nir: [24000, 9000, 28000], }
+  let ratio = @lib.ndvi_calibration_bounds(high, equal, 11.0 / 27.0, 0.001)
+  assert_eq((ratio.minimum, ratio.maximum), (-1, 1))
+  assert_true(ratio.first_zero_offset is None)
+}

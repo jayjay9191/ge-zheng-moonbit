@@ -46,7 +46,7 @@ fn visit_ndvi_pairs(
   screen_qa : Bool,
   land_only : Bool,
   min_coverage : Double,
-  visit : (Int32, Int32, Double, Double) -> Unit,
+  visit : (Int32, Int32, (Int32, Int32), Double, Double) -> Unit,
 ) -> (Int32, Int32, Int32, Double) raise AuditError {
   validate_coverage(min_coverage)
   let { dx, dy, row0, row1, col0, col1, } = common_window(before, after)
@@ -65,7 +65,7 @@ fn visit_ndvi_pairs(
         water_excluded += 1
         continue
       }
-      visit(row, col, a, b)
+      visit(row, col, (ia, ib), a, b)
       valid += 1
     }
   }
@@ -94,7 +94,7 @@ pub fn ndvi_transitions(
     screen_qa,
     land_only,
     min_coverage,
-    (_, _, a, b) => {
+    (_, _, _, a, b) => {
       counts[ndvi_band(a, cut_points)][ndvi_band(b, cut_points)] += 1
     },
   )
@@ -540,7 +540,7 @@ pub fn ndvi_critical_margin(
     screen_qa,
     land_only,
     min_coverage,
-    (_, _, a, b) => {
+    (_, _, _, a, b) => {
       if a >= threshold {
         observed_net -= 1
         increase.push((a - threshold, false))
@@ -649,6 +649,7 @@ pub fn ndvi_neutralization_witness(
     visit_ndvi_pairs(before, after, screen_qa, land_only, min_coverage, (
       row,
       column,
+      _,
       a,
       b,
     ) => {
@@ -742,6 +743,7 @@ pub fn verify_ndvi_witness(
       visit_ndvi_pairs(before, after, screen_qa, land_only, min_coverage, (
         row,
         column,
+        _,
         a,
         b,
       ) => {
@@ -876,6 +878,7 @@ pub fn ndvi_budget_margins(
     visit_ndvi_pairs(before, after, screen_qa, land_only, min_coverage, (
       _,
       _,
+      _,
       a,
       b,
     ) => {
@@ -950,4 +953,94 @@ pub fn ndvi_budget_margins(
     }
   }
   rows
+}
+
+///|
+#derive(ToJson)
+pub(all) struct NdviCalibrationBounds {
+  threshold : Double
+  margin : Double
+  valid : Int32
+  minimum : Int32
+  observed_net : Int32
+  maximum : Int32
+  first_zero_offset : Double?
+}
+
+///|
+fn calibration_ndvi(chip : Chip, i : Int32) -> Double {
+  let red = 11 * chip.red[i] - 80000
+  let nir = 11 * chip.nir[i] - 80000
+  // Collection 2 affine factors share a denominator of 400000.
+  // A single correctly rounded quotient preserves ties between DN ratios.
+  (nir - red).to_double() / (nir + red).to_double()
+}
+
+///|
+/// Apply the same additive NDVI offset to every valid observation on both dates.
+/// Equal NDVIs enter the upper class simultaneously.
+pub fn ndvi_calibration_bounds(
+  before : Chip,
+  after : Chip,
+  threshold : Double,
+  margin : Double,
+  screen_qa~ : Bool = true,
+  min_coverage~ : Double = 0.0,
+  land_only~ : Bool = false,
+) -> NdviCalibrationBounds raise AuditError {
+  validate_ndvi_cut_points([threshold])
+  if !(margin >= 0.0 && threshold - margin > -1.0 && threshold + margin < 1.0) {
+    raise Invalid(
+      "calibration margin must be nonnegative and keep the cutoff inside (-1, 1)",
+    )
+  }
+  let mut net = 0
+  let mut observed_net = 0
+  let events : Array[(Double, Int32)] = []
+  fn observe(value : Double, weight : Int32) -> Unit {
+    let offset = threshold - value
+    if offset <= 0.0 {
+      observed_net += weight
+    }
+    if offset <= -margin {
+      net += weight
+    } else if offset <= margin {
+      events.push((value, weight))
+    }
+  }
+  let (_, valid, _, _) = visit_ndvi_pairs(
+    before,
+    after,
+    screen_qa,
+    land_only,
+    min_coverage,
+    (_, _, indices, _, _) => {
+      observe(calibration_ndvi(before, indices.0), -1)
+      observe(calibration_ndvi(after, indices.1), 1)
+    },
+  )
+  events.sort_by((a, b) => b.0.compare(a.0))
+  let mut minimum = net
+  let mut maximum = net
+  let mut first_zero_offset = if net == 0 { Some(0.0 - margin) } else { None }
+  for i, event in events {
+    net += event.1
+    if i + 1 < events.length() && event.0 == events[i + 1].0 {
+      continue
+    }
+    minimum = minimum.min(net)
+    maximum = maximum.max(net)
+    if net == 0 && first_zero_offset is None {
+      first_zero_offset = Some(threshold - event.0)
+    }
+  }
+  {
+    threshold,
+    margin,
+    valid,
+    minimum,
+    observed_net,
+    maximum,
+    first_zero_offset,
+  }
 }

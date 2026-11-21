@@ -5,9 +5,9 @@
 
 ## 初审核对
 
-在仓库根目录运行 `moon test review`。十二个 [公开接口案例](review/public_contract_test.mbt) 覆盖 QA 与陆地筛选、拒绝不守恒的矩阵、多档迁移和阈值容差。真实裁片可用下面的命令复跑。
+在仓库根目录运行 `moon test review`。十三个 [公开接口案例](review/public_contract_test.mbt) 覆盖 QA 与陆地筛选、拒绝不守恒的矩阵、多档迁移和阈值容差。真实裁片可用下面的命令复跑。
 
-运行 `python scripts/verify_analysis.py`。库源码排除 CLI、生成数据、测试、空行和注释后共 **1,795 行**，再排除纯标点行仍有 **1,493 行**。脚本逐文件报告计数并检查 500 行门槛。
+运行 `python scripts/verify_analysis.py`。库源码排除 CLI、生成数据、测试、空行和注释后共 **1,878 行**，再排除纯标点行仍有 **1,558 行**。脚本逐文件报告计数并检查 500 行门槛。
 
 [肥东两期裁片](data/feidong/)在 0.15 阈值下，QA 剔除前有 **3,031** 个达阈值像元，剔除后有 **663** 个。这个结果来自 MoonBit 的 [QA 配对审计](impact.mbt)。同一验收脚本还以 Python 有理数运算独立对照肥东和巢湖的 NDVI 分类，共核对 **196,608 次像元比较**。
 
@@ -60,6 +60,14 @@ moon run cmd/main -- data/feidong/scene-1.json data/feidong/scene-2.json --trans
 `neutralization` 从同一张容差矩阵计算净变化归零所需的最少像元对。可向归零方向改一步的像元对计入 `single_step_pairs`，两期都能改且合计可走两步的计入 `double_step_pairs`。在 NDVI 0.5 阈值、±0.02 容差下，肥东要抵消 323 个像元的净减少。用完 47 个两步对，再用 229 个单步对，最少 **276 对**。缩小到 ±0.01 后无法归零，结果省略 `minimum_changed_pairs`。Python 独立枚举每个像元对的四种端点组合，核对两地、两档容差、四种筛选。
 
 在 `--transitions 0.5 --margin 0.02` 后加 `--witness` 可输出归零见证。MoonBit 的 `NdviPairFlip` 枚举区分翻转前期、后期或两期。坐标使用第一期栅格的零基行列。肥东见证有 276 个不重复像元对，Python 按坐标重查两期读数和 QA，并逐项重放，净变化准确从 −323 到 0。无解时 `witness` 为 `null`，原本为零时是空数组。默认最多输出 1024 对，超限会报错。
+
+## 两期共用同一 NDVI 偏移
+
+```powershell
+moon run cmd/main -- data/feidong/scene-1.json data/feidong/scene-2.json --transitions 0.5 --calibration-margin 0.02
+```
+
+假设两期所有共同有效像元使用同一个加性 NDVI 偏移，检验固定分类阈值对系统偏移的敏感性。MoonBit 从原始数字量求 NDVI，比值相同的像元同时跨阈值，避免把跳过零误记为能达到零。肥东在 ±0.02 内始终为净减少 **295 到 363 个像元**。巢湖在相同条件下仍为净增加 **1,603 到 1,911 个像元**。独立 Python 参考以有理数逐个重算两期分布，在两处裁片、四种 QA/陆地配置及两个容差下核对 16 组结果。[USGS 比例系数](https://www.usgs.gov/faqs/how-do-i-use-a-scale-factor-landsat-level-2-science-products)
 
 ## 像元预算下的最小容差
 
