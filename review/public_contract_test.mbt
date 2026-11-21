@@ -148,3 +148,55 @@ test "review locates the first tested tolerance that can erase the direction" {
   }
   assert_true(invalid is Err(_))
 }
+
+///|
+test "review critical tolerance distinguishes a strict endpoint from an inclusive one" {
+  let (base, next) = review_threshold_pair()
+  let before = {
+    ..base,
+    width: 1,
+    red: [20000],
+    nir: [20000],
+    qa: [0],
+    saturation: [0],
+  }
+  let after = {
+    ..next,
+    width: 1,
+    red: [20000],
+    nir: [16000],
+    qa: [0],
+    saturation: [0],
+  }
+  let strict = @lib.ndvi_critical_margin(before, after, 0.0)
+  assert_eq(
+    (
+      strict.observed_net,
+      strict.margin_infimum,
+      strict.zero_possible_at_infimum,
+    ),
+    (-1, 0.0, false),
+  )
+  let high = { ..before, nir: [26000], }
+  let near = { ..after, nir: [19999], }
+  let inclusive = @lib.ndvi_critical_margin(high, near, 0.0)
+  assert_eq(inclusive.observed_net, -1)
+  assert_true(
+    inclusive.margin_infimum > 0.0 && inclusive.margin_infimum < 0.001,
+  )
+  assert_true(inclusive.zero_possible_at_infimum)
+  // Swapped red and NIR produce exactly opposite NDVI and a tied pair of flip distances.
+  let mirror = { ..near, red: [26000], nir: [20000], }
+  let tied = @lib.ndvi_critical_margin(high, mirror, 0.0)
+  assert_true(tied.zero_possible_at_infimum)
+  assert_true(tied.margin_infimum > inclusive.margin_infimum)
+  let reversed = @lib.ndvi_critical_margin(near, high, 0.0)
+  assert_eq(
+    (
+      reversed.observed_net,
+      reversed.margin_infimum,
+      reversed.zero_possible_at_infimum,
+    ),
+    (1, inclusive.margin_infimum, true),
+  )
+}

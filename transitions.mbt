@@ -40,21 +40,16 @@ fn validate_ndvi_cut_points(
 }
 
 ///|
-/// Count before-band (row) to after-band (column) transitions on common valid pixels.
-/// Cut points are strictly increasing in (-1, 1); equality enters the higher band.
-pub fn ndvi_transitions(
+fn visit_ndvi_pairs(
   before : Chip,
   after : Chip,
-  cut_points : Array[Double],
-  screen_qa~ : Bool = true,
-  min_coverage~ : Double = 0.0,
-  land_only~ : Bool = false,
-) -> NdviTransitions raise AuditError {
-  validate_ndvi_cut_points(cut_points)
+  screen_qa : Bool,
+  land_only : Bool,
+  min_coverage : Double,
+  visit : (Double, Double) -> Unit,
+) -> (Int32, Int32, Int32, Double) raise AuditError {
   validate_coverage(min_coverage)
   let { dx, dy, row0, row1, col0, col1, } = common_window(before, after)
-  let bands = cut_points.length() + 1
-  let counts = Array::makei(bands, _ => Array::make(bands, 0))
   let mut valid = 0
   let mut water_excluded = 0
   for row in row0..<row1 {
@@ -70,12 +65,37 @@ pub fn ndvi_transitions(
         water_excluded += 1
         continue
       }
-      counts[ndvi_band(a, cut_points)][ndvi_band(b, cut_points)] += 1
+      visit(a, b)
       valid += 1
     }
   }
   let overlap = (row1 - row0) * (col1 - col0)
   let valid_fraction = shared_coverage(valid, overlap, min_coverage)
+  (overlap, valid, water_excluded, valid_fraction)
+}
+
+///|
+/// Count before-band (row) to after-band (column) transitions on common valid pixels.
+/// Cut points are strictly increasing in (-1, 1); equality enters the higher band.
+pub fn ndvi_transitions(
+  before : Chip,
+  after : Chip,
+  cut_points : Array[Double],
+  screen_qa~ : Bool = true,
+  min_coverage~ : Double = 0.0,
+  land_only~ : Bool = false,
+) -> NdviTransitions raise AuditError {
+  validate_ndvi_cut_points(cut_points)
+  let bands = cut_points.length() + 1
+  let counts = Array::makei(bands, _ => Array::make(bands, 0))
+  let (overlap, valid, water_excluded, valid_fraction) = visit_ndvi_pairs(
+    before,
+    after,
+    screen_qa,
+    land_only,
+    min_coverage,
+    (a, b) => counts[ndvi_band(a, cut_points)][ndvi_band(b, cut_points)] += 1,
+  )
   {
     cut_points: cut_points.copy(),
     counts,
@@ -438,5 +458,91 @@ pub fn ndvi_margin_sweep(
     qa_screened: matrix.qa_screened,
     land_only: matrix.land_only,
     valid_fraction: matrix.valid_fraction,
+  }
+}
+
+///|
+#derive(ToJson)
+pub(all) struct NdviCriticalMargin {
+  threshold : Double
+  observed_net : Int32
+  margin_infimum : Double
+  zero_possible_at_infimum : Bool
+  valid : Int32
+  excluded : Int32
+  water_excluded : Int32
+  qa_screened : Bool
+  land_only : Bool
+  valid_fraction : Double
+}
+
+///|
+pub extend NdviCriticalMargin with @json.ToJson::{to_json}
+
+///|
+/// The break point for attaining zero net change under independent bounded perturbations.
+/// A value at the threshold belongs to the upper band, so downward flips need a strict margin.
+pub fn ndvi_critical_margin(
+  before : Chip,
+  after : Chip,
+  threshold : Double,
+  screen_qa~ : Bool = true,
+  min_coverage~ : Double = 0.0,
+  land_only~ : Bool = false,
+) -> NdviCriticalMargin raise AuditError {
+  validate_ndvi_cut_points([threshold])
+  let mut observed_net = 0
+  // ponytail: store two flip distances per valid pixel pair; selection can replace sorting if large rasters dominate.
+  let increase : Array[(Double, Bool)] = []
+  let decrease : Array[(Double, Bool)] = []
+  let (overlap, valid, water_excluded, valid_fraction) = visit_ndvi_pairs(
+    before,
+    after,
+    screen_qa,
+    land_only,
+    min_coverage,
+    (a, b) => {
+      if a >= threshold {
+        observed_net -= 1
+        increase.push((a - threshold, false))
+      } else {
+        decrease.push((threshold - a, true))
+      }
+      if b >= threshold {
+        observed_net += 1
+        decrease.push((b - threshold, false))
+      } else {
+        increase.push((threshold - b, true))
+      }
+    },
+  )
+  let (margin_infimum, zero_possible_at_infimum) = if observed_net == 0 {
+    (0.0, true)
+  } else {
+    let events = if observed_net < 0 { increase } else { decrease }
+    let needed = if observed_net < 0 { -observed_net } else { observed_net }
+    events.sort_by((a, b) => {
+      let by_distance = a.0.compare(b.0)
+      if by_distance != 0 || a.1 == b.1 {
+        by_distance
+      } else if a.1 {
+        -1
+      } else {
+        1
+      }
+    })
+    events[needed - 1]
+  }
+  {
+    threshold,
+    observed_net,
+    margin_infimum,
+    zero_possible_at_infimum,
+    valid,
+    excluded: overlap - valid,
+    water_excluded,
+    qa_screened: screen_qa,
+    land_only,
+    valid_fraction,
   }
 }

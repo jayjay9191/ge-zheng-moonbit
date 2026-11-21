@@ -17,6 +17,8 @@ pub fn inspect_pixel(Chip, Chip, Audit, Int32, Int32) -> PixelEvidence raise Aud
 
 pub fn inspect_sources(Chip, Chip, Double, Int32, Int32, screen_qa? : Bool, min_coverage? : Double) -> PixelEvidence raise AuditError
 
+pub fn ndvi_critical_margin(Chip, Chip, Double, screen_qa? : Bool, min_coverage? : Double, land_only? : Bool) -> NdviCriticalMargin raise AuditError
+
 pub fn ndvi_margin_sweep(Chip, Chip, Double, Array[Double], screen_qa? : Bool, min_coverage? : Double, land_only? : Bool) -> NdviMarginSweep raise AuditError
 
 pub fn ndvi_threshold_bounds(Chip, Chip, Double, Double, screen_qa? : Bool, min_coverage? : Double, land_only? : Bool) -> NdviThresholdBounds raise AuditError
@@ -136,6 +138,21 @@ pub(all) struct NdviCountBounds {
   observed : Int32
   possible : Int32
 }
+
+#derive(@json.ToJson)
+pub(all) struct NdviCriticalMargin {
+  threshold : Double
+  observed_net : Int32
+  margin_infimum : Double
+  zero_possible_at_infimum : Bool
+  valid : Int32
+  excluded : Int32
+  water_excluded : Int32
+  qa_screened : Bool
+  land_only : Bool
+  valid_fraction : Double
+}
+pub fn NdviCriticalMargin::to_json(Self) -> @json.Json
 
 #derive(@json.ToJson)
 pub(all) struct NdviCutCrossing {

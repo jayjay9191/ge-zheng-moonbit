@@ -29,7 +29,7 @@ fn main {
   let start = if args.length() > 2 && args[2] == "--" { 3 } else { 2 }
   if args.length() < start + 3 {
     println(
-      "Usage: moon run cmd/main -- <before.json> <after.json> <NDVI threshold | --transitions <cuts> [--margin <NDVI tolerance> | --margins <list>]] [--direct] [--min-coverage <fraction>] [--inspect <row> <column> | --summary | --sweep [0.10,0.15,0.20] | --qa-impact | --tiles 2x2 | --regions [4|8] [--min-region-pixels <pixels>] [--land-only]]",
+      "Usage: moon run cmd/main -- <before.json> <after.json> <NDVI threshold | --transitions <cuts> [--margin <NDVI tolerance> | --margins <list> | --critical-margin]] [--direct] [--min-coverage <fraction>] [--inspect <row> <column> | --summary | --sweep [0.10,0.15,0.20] | --qa-impact | --tiles 2x2 | --regions [4|8] [--min-region-pixels <pixels>] [--land-only]]",
     )
     @env.exit(2)
   }
@@ -56,6 +56,7 @@ fn main {
     let mut transition : Array[Double]? = None
     let mut margin : Double? = None
     let mut margins : Array[Double]? = None
+    let mut critical_margin = false
     let mut index = start + (if transition_mode { 2 } else { 3 })
     let seen : Map[String, Bool] = Map([])
     while index < args.length() {
@@ -67,6 +68,7 @@ fn main {
       match flag {
         "--direct" => direct = true
         "--land-only" => land_only = true
+        "--critical-margin" => critical_margin = true
         "--summary" => summary = true
         "--qa-impact" => impact = true
         "--sweep" => {
@@ -183,11 +185,33 @@ fn main {
         fail("choose only one of --margin and --margins")
       }
     }
+    if critical_margin {
+      if transition is None {
+        fail("--critical-margin requires --transitions with one cut")
+      }
+      if margin is Some(_) || margins is Some(_) {
+        fail("--critical-margin cannot be combined with --margin or --margins")
+      }
+    }
     if impact && direct {
       fail("--qa-impact compares both QA policies; do not also select --direct")
     }
     if transition is Some(cuts) {
-      let response = if margins is Some(tolerances) {
+      let response = if critical_margin {
+        if cuts.length() != 1 {
+          fail("--critical-margin requires --transitions with one cut")
+        }
+        @json.ToJson::to_json(
+          @audit.ndvi_critical_margin(
+            before,
+            after,
+            cuts[0],
+            screen_qa=!direct,
+            min_coverage=minimum,
+            land_only~,
+          ),
+        )
+      } else if margins is Some(tolerances) {
         if cuts.length() != 1 {
           fail("--margins requires --transitions with one cut")
         }

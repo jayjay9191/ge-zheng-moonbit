@@ -1,5 +1,5 @@
 """Check the real built CLI against both measured Landsat windows."""
-from bisect import bisect_right
+from bisect import bisect_left, bisect_right
 from collections import Counter
 from fractions import Fraction
 import json
@@ -26,6 +26,34 @@ def run_pair(paths, *flags, success=True, threshold="0.15"):
     )
     assert result.returncode == (0 if success else 2), (result.stdout + result.stderr)[:600]
     return json.loads(result.stdout) if success else result.stdout
+
+
+def reference_critical_margin(pairs, threshold):
+    # Independent oracle: test reachable net at candidate radii using sorted marginals.
+    before = sorted(a for a, _ in pairs)
+    after = sorted(b for _, b in pairs)
+    observed = bisect_left(before, threshold) - bisect_left(after, threshold)
+    if observed == 0:
+        return observed, Fraction(0), True
+    radii = sorted({abs(value - threshold) for date in (before, after) for value in date})
+
+    def can_reach_zero(radius, immediately_above):
+        upper = threshold + radius
+        lower = threshold - radius
+        guaranteed = bisect_right if immediately_above else bisect_left
+        if observed < 0:
+            return guaranteed(before, upper) >= bisect_left(after, lower)
+        return bisect_left(before, lower) <= guaranteed(after, upper)
+
+    lo, hi = 0, len(radii) - 1
+    while lo < hi:
+        mid = (lo + hi) // 2
+        if can_reach_zero(radii[mid], True):
+            hi = mid
+        else:
+            lo = mid + 1
+    radius = radii[lo]
+    return observed, radius, can_reach_zero(radius, False)
 
 
 def region_reference(classes, width, code, connectivity, minimum):
@@ -279,6 +307,15 @@ def main():
                 tested = run_pair(paths, "0.5", "--margins", text_margins, *flags, *extra,
                                   threshold="--transitions")
                 assert tested["valid"] == len(pairs)
+                analytical = run_pair(paths, "0.5", "--critical-margin", *flags, *extra,
+                                      threshold="--transitions")
+                nominal, radius, attained = reference_critical_margin(pairs, bound_cut)
+                assert analytical["valid"] == len(pairs)
+                assert analytical["observed_net"] == nominal
+                assert abs(analytical["margin_infimum"] - float(radius)) < 1e-13
+                assert analytical["zero_possible_at_infimum"] is attained
+                if not flags and not extra:
+                    print(f"PASS {folder} critical margin: {float(radius):.10f}, inclusive: {attained}")
                 expected = []
                 for value in text_margins.split(","):
                     tolerance = Fraction(value)
