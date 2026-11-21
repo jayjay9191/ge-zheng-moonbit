@@ -29,7 +29,7 @@ fn main {
   let start = if args.length() > 2 && args[2] == "--" { 3 } else { 2 }
   if args.length() < start + 3 {
     println(
-      "Usage: moon run cmd/main -- <before.json> <after.json> <NDVI threshold | --transitions <cuts> [--margin <NDVI tolerance> | --margins <list> | --critical-margin]] [--direct] [--min-coverage <fraction>] [--inspect <row> <column> | --summary | --sweep [0.10,0.15,0.20] | --qa-impact | --tiles 2x2 | --regions [4|8] [--min-region-pixels <pixels>] [--land-only]]",
+      "Usage: moon run cmd/main -- <before.json> <after.json> <NDVI threshold | --transitions <cuts> [--margin <NDVI tolerance> [--witness] | --margins <list> | --critical-margin]] [--direct] [--min-coverage <fraction>] [--inspect <row> <column> | --summary | --sweep [0.10,0.15,0.20] | --qa-impact | --tiles 2x2 | --regions [4|8] [--min-region-pixels <pixels>] [--land-only]]",
     )
     @env.exit(2)
   }
@@ -57,6 +57,7 @@ fn main {
     let mut margin : Double? = None
     let mut margins : Array[Double]? = None
     let mut critical_margin = false
+    let mut witness = false
     let mut index = start + (if transition_mode { 2 } else { 3 })
     let seen : Map[String, Bool] = Map([])
     while index < args.length() {
@@ -69,6 +70,7 @@ fn main {
         "--direct" => direct = true
         "--land-only" => land_only = true
         "--critical-margin" => critical_margin = true
+        "--witness" => witness = true
         "--summary" => summary = true
         "--qa-impact" => impact = true
         "--sweep" => {
@@ -185,6 +187,9 @@ fn main {
         fail("choose only one of --margin and --margins")
       }
     }
+    if witness && margin is None {
+      fail("--witness requires --margin and --transitions")
+    }
     if critical_margin {
       if transition is None {
         fail("--critical-margin requires --transitions with one cut")
@@ -230,8 +235,8 @@ fn main {
         if cuts.length() != 1 {
           fail("--margin requires --transitions with one cut")
         }
-        @json.ToJson::to_json(
-          @audit.ndvi_threshold_bounds(
+        if witness {
+          let changes = @audit.ndvi_neutralization_witness(
             before,
             after,
             cuts[0],
@@ -239,8 +244,28 @@ fn main {
             screen_qa=!direct,
             min_coverage=minimum,
             land_only~,
-          ),
-        )
+          )
+          Json::object({
+            "threshold": Json(cuts[0]),
+            "margin": Json(tolerance),
+            "witness": match changes {
+              Some(rows) => @json.ToJson::to_json(rows)
+              None => Json::null()
+            },
+          })
+        } else {
+          @json.ToJson::to_json(
+            @audit.ndvi_threshold_bounds(
+              before,
+              after,
+              cuts[0],
+              tolerance,
+              screen_qa=!direct,
+              min_coverage=minimum,
+              land_only~,
+            ),
+          )
+        }
       } else {
         let result = @audit.ndvi_transitions(
           before,

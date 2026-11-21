@@ -21,6 +21,8 @@ pub fn ndvi_critical_margin(Chip, Chip, Double, screen_qa? : Bool, min_coverage?
 
 pub fn ndvi_margin_sweep(Chip, Chip, Double, Array[Double], screen_qa? : Bool, min_coverage? : Double, land_only? : Bool) -> NdviMarginSweep raise AuditError
 
+pub fn ndvi_neutralization_witness(Chip, Chip, Double, Double, limit? : Int32, screen_qa? : Bool, min_coverage? : Double, land_only? : Bool) -> Array[NdviPairWitness]? raise AuditError
+
 pub fn ndvi_threshold_bounds(Chip, Chip, Double, Double, screen_qa? : Bool, min_coverage? : Double, land_only? : Bool) -> NdviThresholdBounds raise AuditError
 
 pub fn ndvi_transitions(Chip, Chip, Array[Double], screen_qa? : Bool, min_coverage? : Double, land_only? : Bool) -> NdviTransitions raise AuditError
@@ -196,6 +198,21 @@ pub(all) struct NdviNeutralization {
   double_step_pairs : Int32
   minimum_changed_pairs : Int32?
 }
+
+#derive(@json.ToJson)
+pub(all) enum NdviPairFlip {
+  BeforeDate
+  AfterDate
+  BothDates
+}
+
+#derive(@json.ToJson)
+pub(all) struct NdviPairWitness {
+  row : Int32
+  column : Int32
+  flip : NdviPairFlip
+}
+pub fn NdviPairWitness::to_json(Self) -> @json.Json
 
 #derive(@json.ToJson)
 pub(all) struct NdviThresholdBounds {

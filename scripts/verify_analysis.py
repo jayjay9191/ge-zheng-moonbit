@@ -328,8 +328,45 @@ def main():
                     assert neutral.get("minimum_changed_pairs") == oracle["minimum_changed_pairs"]
                     for key in ("single_step_pairs", "double_step_pairs"):
                         assert neutral[key] == oracle[key]
+                    minimum = oracle["minimum_changed_pairs"]
+                    if minimum is not None and minimum > 1024:
+                        failure = run_pair(paths, "0.5", "--margin", tolerance, "--witness", *flags, *extra,
+                                           threshold="--transitions", success=False)
+                        assert "witness exceeds output limit" in failure
+                        continue
+                    witness = run_pair(paths, "0.5", "--margin", tolerance, "--witness", *flags, *extra,
+                                       threshold="--transitions")["witness"]
+                    if minimum is None:
+                        assert witness is None
+                    else:
+                        assert len(witness) == minimum
+                        seen = set()
+                        replay_net = sum(int(b >= bound_cut) - int(a >= bound_cut) for a, b in pairs)
+                        radius = Fraction(tolerance)
+                        # Re-map each cell to both source arrays and replay the listed flips.
+                        for change in witness:
+                            key = (before["x"] + change["column"] * before["cell"],
+                                   before["y"] - change["row"] * before["cell"])
+                            assert key not in seen
+                            seen.add(key)
+                            ia, ib = first[key], second[key]
+                            a = reference_pixel(before, ia, screen_qa=not flags)
+                            b = reference_pixel(after, ib, screen_qa=not flags)
+                            assert a is not None and b is not None
+                            if extra:
+                                assert (before["qa"][ia] | after["qa"][ib]) & 128 == 0
+                            action = change["flip"]
+                            assert action in ("BeforeDate", "AfterDate", "BothDates")
+                            for value, sign, selected in (
+                                (a, -1, action != "AfterDate"), (b, 1, action != "BeforeDate"),
+                            ):
+                                if selected:
+                                    low, high = value - radius, value + radius
+                                    assert low < bound_cut <= high
+                                    replay_net += sign * (1 - 2 * int(value >= bound_cut))
+                        assert replay_net == 0
                     if not flags and not extra:
-                        print(f"PASS {folder} neutralization at {tolerance}: {oracle}")
+                        print(f"PASS {folder} neutralization at {tolerance}: {oracle}; witness replayed")
                 text_margins = "0,0.01,0.02,0.05"
                 tested = run_pair(paths, "0.5", "--margins", text_margins, *flags, *extra,
                                   threshold="--transitions")

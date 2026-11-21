@@ -229,3 +229,38 @@ test "review neutralization counts paired pixels rather than date observations" 
   let reverse = @lib.ndvi_threshold_bounds(after, before, 0.0, 0.01)
   assert_eq(reverse.neutralization.minimum_changed_pairs, Some(1))
 }
+
+///|
+test "review sparse witness names one paired cell and both date flips" {
+  let (a, b) = review_threshold_pair()
+  let before = {
+    ..a,
+    width: 2,
+    red: [20000, 20000],
+    nir: [24000, 20001],
+    qa: [0, 0],
+    saturation: [0, 0],
+  }
+  let after = {
+    ..b,
+    width: 2,
+    red: [20000, 20000],
+    nir: [16000, 19999],
+    qa: [0, 0],
+    saturation: [0, 0],
+  }
+  guard @lib.ndvi_neutralization_witness(before, after, 0.0, 0.01)
+    is Some(witness) else {
+    abort("expected a constructive witness")
+  }
+  assert_eq(witness.length(), 1)
+  assert_eq((witness[0].row, witness[0].column), (0, 1))
+  assert_true(witness[0].flip is BothDates)
+  let clipped = Ok(
+    @lib.ndvi_neutralization_witness(before, after, 0.0, 0.01, limit=0),
+  ) catch {
+    err => Err(err)
+  }
+  assert_true(clipped is Err(_))
+  assert_true(@lib.ndvi_neutralization_witness(before, after, 0.0, 0.0) is None)
+}

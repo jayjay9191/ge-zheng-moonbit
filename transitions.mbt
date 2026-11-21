@@ -46,7 +46,7 @@ fn visit_ndvi_pairs(
   screen_qa : Bool,
   land_only : Bool,
   min_coverage : Double,
-  visit : (Double, Double) -> Unit,
+  visit : (Int32, Int32, Double, Double) -> Unit,
 ) -> (Int32, Int32, Int32, Double) raise AuditError {
   validate_coverage(min_coverage)
   let { dx, dy, row0, row1, col0, col1, } = common_window(before, after)
@@ -65,7 +65,7 @@ fn visit_ndvi_pairs(
         water_excluded += 1
         continue
       }
-      visit(a, b)
+      visit(row, col, a, b)
       valid += 1
     }
   }
@@ -94,7 +94,9 @@ pub fn ndvi_transitions(
     screen_qa,
     land_only,
     min_coverage,
-    (a, b) => counts[ndvi_band(a, cut_points)][ndvi_band(b, cut_points)] += 1,
+    (_, _, a, b) => {
+      counts[ndvi_band(a, cut_points)][ndvi_band(b, cut_points)] += 1
+    },
   )
   {
     cut_points: cut_points.copy(),
@@ -538,7 +540,7 @@ pub fn ndvi_critical_margin(
     screen_qa,
     land_only,
     min_coverage,
-    (a, b) => {
+    (_, _, a, b) => {
       if a >= threshold {
         observed_net -= 1
         increase.push((a - threshold, false))
@@ -582,4 +584,108 @@ pub fn ndvi_critical_margin(
     land_only,
     valid_fraction,
   }
+}
+
+///|
+#derive(ToJson)
+pub(all) enum NdviPairFlip {
+  BeforeDate
+  AfterDate
+  BothDates
+}
+
+///|
+#derive(ToJson)
+pub(all) struct NdviPairWitness {
+  row : Int32
+  column : Int32
+  flip : NdviPairFlip
+}
+
+///|
+pub extend NdviPairWitness with @json.ToJson::{to_json}
+
+///|
+/// Construct an exact zero-net witness on the first chip's zero-based grid.
+/// The output cap bounds materialization; None means no attainable witness.
+pub fn ndvi_neutralization_witness(
+  before : Chip,
+  after : Chip,
+  threshold : Double,
+  margin : Double,
+  limit~ : Int32 = 1024,
+  screen_qa~ : Bool = true,
+  min_coverage~ : Double = 0.0,
+  land_only~ : Bool = false,
+) -> Array[NdviPairWitness]? raise AuditError {
+  if limit < 0 || limit > 4096 {
+    raise Invalid("witness limit must be in [0, 4096]")
+  }
+  let bounds = ndvi_threshold_bounds(
+    before,
+    after,
+    threshold,
+    margin,
+    screen_qa~,
+    min_coverage~,
+    land_only~,
+  )
+  guard bounds.neutralization.minimum_changed_pairs is Some(pair_count) else {
+    return None
+  }
+  if pair_count > limit {
+    raise Invalid("minimal witness exceeds output limit")
+  }
+  if pair_count == 0 {
+    return Some([])
+  }
+  let increase = bounds.net.observed < 0
+  let deficit = if increase {
+    -bounds.net.observed
+  } else {
+    bounds.net.observed
+  }
+  let doubles = deficit - pair_count
+  let singles = pair_count - doubles
+  let spare_double = bounds.neutralization.double_step_pairs > doubles &&
+    singles == 1
+  let lower = threshold - margin
+  let upper = threshold + margin
+  let double_changes : Array[NdviPairWitness] = []
+  let single_changes : Array[NdviPairWitness] = []
+  // ponytail: replay the pair iterator once, retaining only emitted cells.
+  ignore(
+    visit_ndvi_pairs(before, after, screen_qa, land_only, min_coverage, (
+      row,
+      column,
+      a,
+      b,
+    ) => {
+      let a_can_flip = if increase {
+        a >= threshold && a < upper
+      } else {
+        a < threshold && a >= lower
+      }
+      let b_can_flip = if increase {
+        b < threshold && b >= lower
+      } else {
+        b >= threshold && b < upper
+      }
+      match (a_can_flip, b_can_flip) {
+        (true, true) =>
+          if double_changes.length() < doubles {
+            double_changes.push({ row, column, flip: BothDates, })
+          } else if spare_double && single_changes.is_empty() {
+            single_changes.push({ row, column, flip: BeforeDate, })
+          }
+        (true, false) | (false, true) =>
+          if !spare_double && single_changes.length() < singles {
+            let flip = if a_can_flip { BeforeDate } else { AfterDate }
+            single_changes.push({ row, column, flip, })
+          }
+        (false, false) => ()
+      }
+    }),
+  )
+  Some(double_changes + single_changes)
 }
