@@ -5,9 +5,9 @@
 
 ## 初审核对
 
-在仓库根目录运行 `moon test review`。十一个 [公开接口案例](review/public_contract_test.mbt) 覆盖 QA 与陆地筛选、拒绝不守恒的矩阵、多档迁移和阈值容差。真实裁片可用下面的命令复跑。
+在仓库根目录运行 `moon test review`。十二个 [公开接口案例](review/public_contract_test.mbt) 覆盖 QA 与陆地筛选、拒绝不守恒的矩阵、多档迁移和阈值容差。真实裁片可用下面的命令复跑。
 
-运行 `python scripts/verify_analysis.py`。库源码排除 CLI、生成数据、测试、空行和注释后共 **1,750 行**，再排除纯标点行仍有 **1,455 行**。脚本逐文件报告计数并检查 500 行门槛。
+运行 `python scripts/verify_analysis.py`。库源码排除 CLI、生成数据、测试、空行和注释后共 **1,795 行**，再排除纯标点行仍有 **1,493 行**。脚本逐文件报告计数并检查 500 行门槛。
 
 [肥东两期裁片](data/feidong/)在 0.15 阈值下，QA 剔除前有 **3,031** 个达阈值像元，剔除后有 **663** 个。这个结果来自 MoonBit 的 [QA 配对审计](impact.mbt)。同一验收脚本还以 Python 有理数运算独立对照肥东和巢湖的 NDVI 分类，共核对 **196,608 次像元比较**。
 
@@ -68,6 +68,12 @@ moon run cmd/main -- data/feidong/scene-1.json data/feidong/scene-2.json --trans
 ```
 
 每个像元对最多抵消两步。MoonBit 按翻转距离排序，一次扫出每个临界点能提供一步或两步的像元对数量。肥东净迁移为 −323，允许 161 对时无解，162 对时临界容差约 0.05327544，须严格超过该点。允许 276 对时约 0.01979154，端点可达。结果基于阈值分类的数学模型，表示在给定预算下净值归零的条件。`python scripts/verify_analysis.py` 使用有理数计算候选半径，再直接重算指定数量像元所能抵消的幅度。
+
+同一裁片可一次检查多档预算。算法按预算从大到小分配首个达标的翻转事件，再按输入顺序输出。乱序和重复预算都会保留。P 为有效像元对数，B 为预算数，排序和扫描的总时间为 O(P log P + B log B)。
+
+```powershell
+moon run cmd/main -- data/feidong/scene-1.json data/feidong/scene-2.json --transitions 0.5 --pair-budgets "323,161,276,162,162,0,323"
+```
 
 ## 验收外部像元见证
 

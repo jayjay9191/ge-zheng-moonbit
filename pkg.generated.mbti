@@ -19,6 +19,8 @@ pub fn inspect_sources(Chip, Chip, Double, Int32, Int32, screen_qa? : Bool, min_
 
 pub fn ndvi_budget_margin(Chip, Chip, Double, Int32, screen_qa? : Bool, min_coverage? : Double, land_only? : Bool) -> NdviBudgetMargin raise AuditError
 
+pub fn ndvi_budget_margins(Chip, Chip, Double, Array[Int32], screen_qa? : Bool, min_coverage? : Double, land_only? : Bool) -> Array[NdviBudgetMargin] raise AuditError
+
 pub fn ndvi_critical_margin(Chip, Chip, Double, screen_qa? : Bool, min_coverage? : Double, land_only? : Bool) -> NdviCriticalMargin raise AuditError
 
 pub fn ndvi_margin_sweep(Chip, Chip, Double, Array[Double], screen_qa? : Bool, min_coverage? : Double, land_only? : Bool) -> NdviMarginSweep raise AuditError

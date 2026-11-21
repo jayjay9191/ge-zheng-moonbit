@@ -351,3 +351,34 @@ test "review scarce pairs increase the neutralization margin" {
     @lib.ndvi_critical_margin(before, after, 0.0).margin_infimum,
   )
 }
+
+///|
+test "review batched budgets preserve order, duplicates and strict endpoints" {
+  let (base, next) = review_threshold_pair()
+  let before = {
+    ..base,
+    width: 1,
+    red: [20000],
+    nir: [20000],
+    qa: [0],
+    saturation: [0],
+  }
+  let after = {
+    ..next,
+    width: 1,
+    red: [20000],
+    nir: [16000],
+    qa: [0],
+    saturation: [0],
+  }
+  let rows = @lib.ndvi_budget_margins(before, after, 0.0, [2, 0, 1, 2])
+  assert_eq(rows.map(row => row.pair_budget), [2, 0, 1, 2])
+  assert_eq(rows.map(row => row.observed_net), [-1, -1, -1, -1])
+  assert_true(rows[1].critical is None)
+  for index in [0, 2, 3] {
+    let critical = rows[index].critical.unwrap()
+    assert_eq((critical.margin, critical.attained), (0.0, false))
+  }
+  let balanced = @lib.ndvi_budget_margins(before, before, 0.0, [0, 10])
+  assert_true(balanced.all(row => row.critical.unwrap().attained))
+}

@@ -427,11 +427,13 @@ def main():
                     print(f"PASS {folder} critical margin: {float(radius):.10f}, inclusive: {attained}")
                     if folder == "data/feidong":
                         budgets = (161, 162, 276, 323)
+                        by_budget = {}
                         for cap in budgets:
                             report = run_pair(paths, "0.5", "--pair-budget", str(cap), threshold="--transitions")
                             assert (report["observed_net"], report["pair_budget"]) == (nominal, cap)
                             expected = reference_budget_boundary(pairs, bound_cut, cap)
                             actual = report.get("critical")
+                            by_budget[cap] = actual
                             if expected is None:
                                 assert actual is None
                             else:
@@ -443,6 +445,17 @@ def main():
                                                          threshold="--transitions")["neutralization"]["minimum_changed_pairs"]
                                                 for offset in (-1e-9, 1e-9))
                                 assert (below is None or below > cap) and above == cap
+                        order = (323, 161, 276, 162, 162, 0, 323)
+                        batch = run_pair(paths, "0.5", "--pair-budgets", ",".join(map(str, order)),
+                                         threshold="--transitions")["budgets"]
+                        assert [row["pair_budget"] for row in batch] == list(order)
+                        assert [row["observed_net"] for row in batch] == [nominal] * len(order)
+                        assert [row.get("critical") for row in batch] == [by_budget.get(cap) for cap in order]
+                        for bad in ("", "-1,2", "0,1.5", "1,,2"):
+                            run_pair(paths, "0.5", "--pair-budgets", bad, threshold="--transitions", success=False)
+                        run_pair(paths, "0.5", "--pair-budget", "162", "--pair-budgets", "162,276",
+                                 threshold="--transitions", success=False)
+                        print("PASS one sweep preserves seven unordered and repeated budget queries")
                         run_pair(paths, "0.5", "--pair-budget", "-1", threshold="--transitions", success=False)
                         run_pair(paths, "0.3,0.5", "--pair-budget", "162", threshold="--transitions", success=False)
                         run_pair(paths, "0.5", "--pair-budget", "162", "--margin", "0.02", threshold="--transitions", success=False)

@@ -826,9 +826,7 @@ pub(all) struct NdviBudgetMargin {
 }
 
 ///|
-/// Sweep distance events while tracking how many distinct pairs supply one
-/// step or two. Endpoint equality is processed before strict downward flips.
-/// The boundary is theoretical, as in ndvi_critical_margin.
+/// Return the theoretical boundary for a single pair budget.
 pub fn ndvi_budget_margin(
   before : Chip,
   after : Chip,
@@ -838,10 +836,36 @@ pub fn ndvi_budget_margin(
   min_coverage~ : Double = 0.0,
   land_only~ : Bool = false,
 ) -> NdviBudgetMargin raise AuditError {
-  if pair_budget < 0 {
+  ndvi_budget_margins(
+    before,
+    after,
+    threshold,
+    [pair_budget],
+    screen_qa~,
+    min_coverage~,
+    land_only~,
+  )[0]
+}
+
+///|
+/// Resolve all requested pair budgets in one distance sweep.
+/// The result keeps input order, including repeated budgets.
+pub fn ndvi_budget_margins(
+  before : Chip,
+  after : Chip,
+  threshold : Double,
+  pair_budgets : Array[Int32],
+  screen_qa~ : Bool = true,
+  min_coverage~ : Double = 0.0,
+  land_only~ : Bool = false,
+) -> Array[NdviBudgetMargin] raise AuditError {
+  if pair_budgets.any(budget => budget < 0) {
     raise Invalid("pair budget must be nonnegative")
   }
   validate_ndvi_cut_points([threshold])
+  if pair_budgets.is_empty() {
+    return []
+  }
   let mut observed_net = 0
   let mut pair = 0
   // ponytail: sort the at-most-two events per pair in memory; compact
@@ -871,21 +895,35 @@ pub fn ndvi_budget_margin(
     }),
   )
   if observed_net == 0 {
-    return {
+    return pair_budgets.map(pair_budget => {
       observed_net,
       pair_budget,
       critical: Some({ margin: 0.0, attained: true, }),
-    }
+    })
   }
   let needed = observed_net.abs()
-  if pair_budget < (needed + 1) / 2 {
-    return { observed_net, pair_budget, critical: None, }
+  let half = needed / 2 + needed % 2
+  let rows : Array[NdviBudgetMargin] = pair_budgets.map(pair_budget => {
+    observed_net,
+    pair_budget,
+    critical: None,
+  })
+  let pending : Array[(Int32, Int32)] = []
+  for i, budget in pair_budgets {
+    if budget >= half {
+      pending.push((budget, i))
+    }
   }
+  if pending.is_empty() {
+    return rows
+  }
+  pending.sort_by((a, b) => b.0.compare(a.0))
   let events = if observed_net < 0 { increase } else { decrease }
   events.sort_by((a, b) => compare_flip_margins((a.0, a.1), (b.0, b.1)))
   let active = Array::make(pair, false)
   let mut active_pairs = 0
   let mut double_pairs = 0
+  let mut next = 0
   for event in events {
     if active[event.2] {
       double_pairs += 1
@@ -893,14 +931,23 @@ pub fn ndvi_budget_margin(
       active[event.2] = true
       active_pairs += 1
     }
-    // Fill the budget with the strongest pairs. A double also allows one step.
-    if active_pairs.min(pair_budget) + double_pairs.min(pair_budget) >= needed {
-      return {
+    if active_pairs < needed - double_pairs {
+      continue
+    }
+    // Double pairs offset up to two steps but can always supply a single step.
+    let required = needed - double_pairs.min(needed / 2)
+    while next < pending.length() && pending[next].0 >= required {
+      let (pair_budget, index) = pending[next]
+      rows[index] = {
         observed_net,
         pair_budget,
         critical: Some({ margin: event.0, attained: event.1, }),
       }
+      next += 1
+    }
+    if next == pending.length() {
+      break
     }
   }
-  { observed_net, pair_budget, critical: None, }
+  rows
 }
