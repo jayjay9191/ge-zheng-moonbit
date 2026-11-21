@@ -228,11 +228,20 @@ pub(all) struct NdviCountBounds {
 
 ///|
 #derive(ToJson)
+pub(all) struct NdviNetBounds {
+  minimum : Int32
+  observed : Int32
+  maximum : Int32
+}
+
+///|
+#derive(ToJson)
 pub(all) struct NdviThresholdBounds {
   threshold : Double
   margin : Double
   up : NdviCountBounds
   down : NdviCountBounds
+  net : NdviNetBounds
   valid : Int32
   excluded : Int32
   water_excluded : Int32
@@ -294,18 +303,27 @@ pub fn ndvi_threshold_bounds(
       }
     }
   }
+  let guaranteed_up = matrix.counts[0][last_band]
+  let guaranteed_down = matrix.counts[last_band][0]
   {
     threshold,
     margin,
     up: {
-      guaranteed: matrix.counts[0][last_band],
+      guaranteed: guaranteed_up,
       observed: observed_up,
       possible: possible_up,
     },
     down: {
-      guaranteed: matrix.counts[last_band][0],
+      guaranteed: guaranteed_down,
       observed: observed_down,
       possible: possible_down,
+    },
+    // The net is (after above cut) minus (before above cut).
+    // Extremes are attainable by moving the dates in opposite directions.
+    net: {
+      minimum: guaranteed_up - possible_down,
+      observed: observed_up - observed_down,
+      maximum: possible_up - guaranteed_down,
     },
     valid: matrix.valid,
     excluded: matrix.excluded,

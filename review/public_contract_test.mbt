@@ -71,7 +71,7 @@ test "review counts crossings at each cut, including a two-band jump" {
 }
 
 ///|
-test "review bounds threshold crossings under observation tolerance" {
+fn review_threshold_pair() -> (@lib.Chip, @lib.Chip) {
   let before : @lib.Chip = {
     scene: "review-bounds-before",
     date: "2024-09-09",
@@ -92,6 +92,12 @@ test "review bounds threshold crossings under observation tolerance" {
     date: "2024-09-25",
     nir: [24000, 24000, 19999, 16000],
   }
+  (before, after)
+}
+
+///|
+test "review bounds threshold crossings under observation tolerance" {
+  let (before, after) = review_threshold_pair()
   let bounds = @lib.ndvi_threshold_bounds(before, after, 0.0, 0.01)
   assert_eq(
     (bounds.up.guaranteed, bounds.up.observed, bounds.up.possible),
@@ -110,4 +116,19 @@ test "review bounds threshold crossings under observation tolerance" {
     err => Err(err)
   }
   assert_true(invalid is Err(_))
+}
+
+///|
+test "review signed change takes its exact extrema even when both directions are possible" {
+  let (before, after) = review_threshold_pair()
+  let bounds = @lib.ndvi_threshold_bounds(before, after, 0.0, 0.01)
+  assert_eq(
+    (bounds.net.minimum, bounds.net.observed, bounds.net.maximum),
+    (-1, 0, 2),
+  )
+  let reverse = @lib.ndvi_threshold_bounds(after, before, 0.0, 0.01)
+  assert_eq(
+    (reverse.net.minimum, reverse.net.observed, reverse.net.maximum),
+    (-2, 0, 1),
+  )
 }

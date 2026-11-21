@@ -150,9 +150,11 @@ def main():
             expected_transitions = [[0] * 3 for _ in range(3)]
             expected_land = [[0] * 3 for _ in range(3)]
             cut_counts = [[0, 0] for _ in cuts]
-            cut, margin = Fraction("0.5"), Fraction("0.01")
+            bound_cut, margin = Fraction("0.5"), Fraction("0.01")
             bounds = [[0] * 3 for _ in range(2)]
             land_bounds = [[0] * 3 for _ in range(2)]
+            signed = [0, 0, 0]
+            land_signed = [0, 0, 0]
             land_cut_counts = [[0, 0] for _ in cuts]
             common = first.keys() & second.keys()
             for point in common:
@@ -173,13 +175,21 @@ def main():
                             land_cut_counts[i][1] += down
                     # Direct interval extrema from per-pixel rational NDVI, without banding.
                     for direction, (start, finish) in enumerate(((a, b), (b, a))):
-                        checks = (start + margin < cut <= finish - margin,
-                                  start < cut <= finish,
-                                  start - margin < cut <= finish + margin)
+                        checks = (start + margin < bound_cut <= finish - margin,
+                                  start < bound_cut <= finish,
+                                  start - margin < bound_cut <= finish + margin)
                         for i, crossed in enumerate(checks):
                             bounds[direction][i] += crossed
                             if is_land:
                                 land_bounds[direction][i] += crossed
+                    endpoints = [int(right >= bound_cut) - int(left >= bound_cut)
+                                 for left in (a - margin, a + margin)
+                                 for right in (b - margin, b + margin)]
+                    net = (min(endpoints), int(b >= bound_cut) - int(a >= bound_cut), max(endpoints))
+                    for i, count in enumerate(net):
+                        signed[i] += count
+                        if is_land:
+                            land_signed[i] += count
             transitions = run_pair(paths, "0.2,0.5", *flags, threshold="--transitions")
             assert transitions["cut_points"] == [0.2, 0.5]
             assert transitions["qa_screened"] is (not flags)
@@ -240,8 +250,9 @@ def main():
             assert transitions["water_excluded"] == 0
             assert land["water_excluded"] == transitions["valid"] - land["valid"]
             assert land["excluded"] == transitions["excluded"] + land["water_excluded"]
-            for extra, expected, valid_total in (
-                ((), bounds, transitions["valid"]), (("--land-only",), land_bounds, land["valid"]),
+            for extra, expected, net, valid_total in (
+                ((), bounds, signed, transitions["valid"]),
+                (("--land-only",), land_bounds, land_signed, land["valid"]),
             ):
                 measured = run_pair(paths, "0.5", "--margin", "0.01", *flags, *extra,
                                     threshold="--transitions")
@@ -249,11 +260,14 @@ def main():
                 assert measured["land_only"] == bool(extra)
                 for name, counts in zip(("up", "down"), expected):
                     assert measured[name] == dict(zip(("guaranteed", "observed", "possible"), counts))
+                assert measured["net"] == dict(zip(("minimum", "observed", "maximum"), net))
                 if not flags and not extra:
                     reverse_bounds = run_pair(paths[::-1], "0.5", "--margin", "0.01",
                                               threshold="--transitions")
                     assert (reverse_bounds["up"], reverse_bounds["down"]) == (measured["down"], measured["up"])
-                    print(f"PASS {folder} threshold 0.5 +/- 0.01: up {bounds[0]}, down {bounds[1]}")
+                    assert reverse_bounds["net"] == dict(zip(("minimum", "observed", "maximum"),
+                                                             (-value for value in reversed(net))))
+                    print(f"PASS {folder} threshold 0.5 +/- 0.01: up {bounds[0]}, down {bounds[1]}, net {net}")
             if not flags:
                 reverse = run_pair(paths[::-1], "0.2,0.5", threshold="--transitions")
                 assert reverse["summary"]["cut_crossings"] == [

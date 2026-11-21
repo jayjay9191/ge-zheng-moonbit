@@ -145,11 +145,19 @@ pub(all) struct NdviCutCrossing {
 pub fn NdviCutCrossing::to_json(Self) -> @json.Json
 
 #derive(@json.ToJson)
+pub(all) struct NdviNetBounds {
+  minimum : Int32
+  observed : Int32
+  maximum : Int32
+}
+
+#derive(@json.ToJson)
 pub(all) struct NdviThresholdBounds {
   threshold : Double
   margin : Double
   up : NdviCountBounds
   down : NdviCountBounds
+  net : NdviNetBounds
   valid : Int32
   excluded : Int32
   water_excluded : Int32
