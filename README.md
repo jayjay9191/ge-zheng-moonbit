@@ -3,6 +3,55 @@
 
 在计算植被指数变化前，先检查两期栅格是否落在同一网格，再剔除云、阴影、雪、饱和和无数据像元。输出共同有效率、阈值上下的变化面积、逐像元差值以及排除原因。首版面向北向、30 米、同一 WGS84 UTM 分区的 Landsat 8/9 Collection 2 Level-2 裁片。
 
+## 安装与复跑
+
+在现有 MoonBit 工程中添加发布包。公开 API 见 [Mooncakes](https://mooncakes.io/docs/jayjay9191/ge-zheng-moonbit)。
+
+```sh
+moon add jayjay9191/ge-zheng-moonbit@0.1.2
+```
+
+在源码仓库根目录运行以下命令，分别检查双样区结果和外部接口。Node.js 与 Python 版本见[从新检出复跑](#从新检出复跑)。
+
+```sh
+moon run cmd/main -- data/scene-1.json data/scene-2.json 0.15 --summary
+moon run cmd/main -- data/feidong/scene-1.json data/feidong/scene-2.json 0.15 --qa-impact
+moon test review
+python scripts/verify_local.py
+python scripts/verify_analysis.py
+```
+
+### 官方影像实测与独立基线
+
+条件为 30 米 Landsat 9 双期裁片、共同网格和绝对 ΔNDVI ≥ 0.15。统计仅归属于所取的 128×128 像元窗口。
+
+| 场景 | 共同有效像元 | 上升 | 下降 | 独立复算 |
+| --- | ---: | ---: | ---: | --- |
+| [巢湖，QA 质检后](data/sources.json) | 14,224 | 10,703 | 94 | Python 有理数逐像元复算 |
+| [肥东，直接算](data/feidong/sources.json) | 16,377 | 2,058 | 973 | ArcGIS Pro 3.7.1 与 Python 分别复算 |
+| [肥东，QA 质检后](data/feidong/sources.json) | 11,257 | 86 | 577 | ArcGIS Pro 3.7.1 与 Python 分别复算 |
+
+肥东在 0.10、0.15、0.20 三档的结果见[阈值对照](#肥东实测--一分钟演示)。[ArcGIS Pro 记录](docs/feidong-arcgis.json)覆盖肥东 0.15 档两个 QA 模式。ArcPy 从地理参考栅格独立算出 NDVI，核对分类、NoData、面积和差值。Python 分数实现另覆盖双样区与三档阈值。
+
+GIS 工作流可用栅格计算器、掩膜和区域统计实现同样的分类。格证把[共同网格校验与 QA 位掩膜](audit.mbt)、[跨阈值计数](sensitivity.mbt)和[逐像元审计](audit.mbt)放在可从项目复用的 MoonBit 库中。一次复跑即可对照掩膜前后的计数，并追到被筛除的像元。用于外部核对的 GIS 栅格和复算步骤见 [ArcGIS Pro 复算](#arcgis-pro-复算)。
+
+### 边界与未完成事项
+
+- 支持现有输入契约下的北向、30 米 Landsat 8/9 Collection 2 Level-2 裁片。两期须在同一 WGS84 UTM 分区，交叠网格须按整像元对齐。
+- 核心读取项目定义的裁片 JSON。标准源资产可通过 Python 预处理转成裁片。其他传感器、跨投影重采样和旋转栅格改正尚未覆盖。
+- 独立基线包含两个样区，每个样区两期。NDVI 分类只描述阈值上的变化，地类归因需要额外地面证据。
+
+### 双样区运行基准
+
+在 Windows、AMD Ryzen 9 8940HX、Node.js 24.19.0 上，以下两个已编译 CLI 调用连续执行 5 轮。每轮各启动两次 Node.js，包含读取 JSON、计算和输出，排除编译。中位数约 320 ms，范围 283–324 ms。
+
+```sh
+node gezheng.js data/scene-1.json data/scene-2.json 0.15 --summary
+node gezheng.js data/feidong/scene-1.json data/feidong/scene-2.json 0.15 --qa-impact
+```
+
+先用 `python scripts/verify_local.py` 生成 `gezheng.js`。单机结果用于后续同环境回归比较。
+
 ## 初审核对
 
 在仓库根目录运行 `moon test review`。十三个 [公开接口案例](review/public_contract_test.mbt) 覆盖 QA 与陆地筛选、拒绝不守恒的矩阵、多档迁移和阈值容差。真实裁片可用下面的命令复跑。
@@ -219,6 +268,8 @@ node gezheng.js data/scene-1.json data/scene-2.json 0.15
 安装 MoonBit CLI、Node.js 22.3+ 和 Python 3.10+。在仓库根目录运行 `python scripts/verify_local.py`。入口自动跑 MoonBit 测试、从源码构建 JS、核对肥东覆盖门槛和像元证据，再复算两地案例并重建两个离线报告。验收不需要联网或安装第三方 Python 包。已有 `gezheng.js` 的验收包可以直接用试跑.cmd。
 
 ## 实现与验证
+
+AI 用于辅助整理技术说明、生成测试初稿和对照脚本。计算依据保留在 MoonBit 源码与 USGS 裁片元数据中，发布前用固定样区的独立 Python 算法、ArcGIS 结果和公开接口测试交叉核对。
 
 MoonBit 执行网格校验、求交、QA 位运算、反射率换算、NDVI、分类和面积统计。Node.js 负责命令行输入输出。Python 下载裁片、用分数独立验算并渲染报告。可用 MoonBit 编译器重新构建：
 
