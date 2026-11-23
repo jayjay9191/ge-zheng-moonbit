@@ -29,7 +29,7 @@ fn main {
   let start = if args.length() > 2 && args[2] == "--" { 3 } else { 2 }
   if args.length() < start + 3 {
     println(
-      "Usage: moon run cmd/main -- <before.json> <after.json> <NDVI threshold | --transitions <cuts> [--margin <NDVI tolerance> [--witness | --verify-witness <file>] | --margins <list> | --critical-margin | --calibration-margin <tolerance> | --pair-budget <count> | --pair-budgets <list>]] [--direct] [--min-coverage <fraction>] [--inspect <row> <column> | --summary | --sweep [0.10,0.15,0.20] | --qa-impact | --tiles 2x2 | --regions [4|8] [--min-region-pixels <pixels>] [--land-only]]",
+      "Usage: moon run cmd/main -- <before.json> <after.json> <NDVI threshold | --transitions <cuts> [--margin <NDVI tolerance> [--witness | --verify-witness <file>] | --margins <list> | --critical-margin | --calibration-margin <tolerance> | --pair-budget <count> | --pair-budgets <list>]] [--direct] [--min-coverage <fraction>] [--inspect <row> <column> | --summary | --sweep [0.10,0.15,0.20] | --qa-impact | --shift-stress | --tiles 2x2 | --regions [4|8] [--min-region-pixels <pixels>] [--land-only]]",
     )
     @env.exit(2)
   }
@@ -49,6 +49,7 @@ fn main {
     let mut inspect : (Int32, Int32)? = None
     let mut sweep : Array[Double]? = None
     let mut impact = false
+    let mut shift_stress = false
     let mut regions : Int32? = None
     let mut region_min : Int32? = None
     let mut land_only = false
@@ -108,6 +109,7 @@ fn main {
           verify_witness = Some(args[index])
         }
         "--summary" => summary = true
+        "--shift-stress" => shift_stress = true
         "--qa-impact" => impact = true
         "--sweep" => {
           let thresholds : Array[Double] = [0.10, 0.15, 0.20]
@@ -197,13 +199,14 @@ fn main {
       inspect is Some(_),
       sweep is Some(_),
       impact,
+      shift_stress,
       tiles is Some(_),
       regions is Some(_),
       transition is Some(_),
     ]
     if modes.filter(value => value).length() > 1 {
       fail(
-        "choose only one of --summary, --inspect, --sweep, --qa-impact, --tiles, --regions and --transitions",
+        "choose only one of --summary, --inspect, --sweep, --qa-impact, --shift-stress, --tiles, --regions and --transitions",
       )
     }
     if region_min is Some(_) && regions is None {
@@ -266,6 +269,17 @@ fn main {
     }
     if impact && direct {
       fail("--qa-impact compares both QA policies; do not also select --direct")
+    }
+    if shift_stress {
+      let result = @audit.alignment_stress(
+        before,
+        after,
+        threshold,
+        screen_qa=!direct,
+        min_coverage=minimum,
+      )
+      println(Json(result).stringify())
+      return
     }
     if transition is Some(cuts) {
       let response = if calibration_margin is Some(radius) {

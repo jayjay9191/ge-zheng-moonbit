@@ -7,6 +7,8 @@ import {
 }
 
 // Values
+pub fn alignment_stress(Chip, Chip, Double, screen_qa? : Bool, min_coverage? : Double) -> AlignmentStress raise AuditError
+
 pub fn change_regions(Audit, connectivity? : Int32, min_pixels? : Int32, land_only? : Bool) -> ChangeRegions raise AuditError
 
 pub fn compare(Chip, Chip, Double, screen_qa? : Bool, min_coverage? : Double, pixel_grids? : Bool) -> Audit raise AuditError
@@ -54,6 +56,27 @@ pub suberror AuditError {
 }
 
 // Types and methods
+#derive(@json.ToJson)
+pub(all) struct AlignmentStress {
+  first_scene : String
+  second_scene : String
+  epsg : Int32
+  x : Int32
+  y : Int32
+  width : Int32
+  height : Int32
+  cell : Int32
+  threshold : Double
+  qa_screened : Bool
+  valid : Int32
+  valid_fraction : Double
+  unstable : Int32
+  min_change_m2 : Int64
+  max_change_m2 : Int64
+  scenarios : Array[ShiftScenario]
+  stability : Array[Int32]
+}
+
 #derive(@json.ToJson)
 pub(all) struct Audit {
   qa_screened : Bool
@@ -369,6 +392,16 @@ pub(all) struct Sensitivity {
   loss_relative_range : Double
   sensitive : Bool
   conclusion : String
+}
+
+#derive(@json.ToJson)
+pub(all) struct ShiftScenario {
+  dc : Int32
+  dr : Int32
+  gain : Int32
+  loss : Int32
+  stable : Int32
+  different_from_base : Int32
 }
 
 #derive(@json.ToJson)

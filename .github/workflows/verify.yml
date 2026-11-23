@@ -25,6 +25,10 @@ jobs:
         run: python scripts/verify_local.py
       - name: Verify threshold sweep, QA pairing and tile CLI
         run: python scripts/verify_analysis.py
+      - name: Verify the spatial stress test and GDAL export on three real sites
+        run: |
+          python -m pip install rasterio
+          python scripts/verify_shift_stress.py --geotiff
       - uses: actions/upload-artifact@v4
         with:
           name: gridproof-reports

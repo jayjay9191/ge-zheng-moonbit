@@ -416,3 +416,45 @@ test "review equal calibration events can jump across zero without reaching it" 
   assert_eq((ratio.minimum, ratio.maximum), (-1, 1))
   assert_true(ratio.first_zero_offset is None)
 }
+
+///|
+test "alignment stress keeps one valid population across all five offsets" {
+  let before : @lib.Chip = {
+    scene: "stress-before",
+    date: "2024-09-09",
+    epsg: 32650,
+    x: 300000,
+    y: 3500000,
+    width: 4,
+    height: 4,
+    cell: 30,
+    red: Array::make(16, 20000),
+    nir: Array::make(16, 20000),
+    qa: Array::make(16, 0),
+    saturation: Array::make(16, 0),
+  }
+  let nir = before.nir.copy()
+  nir[5] = 35000
+  let after = { ..before, scene: "stress-after", date: "2024-09-25", nir, }
+  let audit = @lib.alignment_stress(before, after, 0.15)
+  assert_eq(
+    (audit.width, audit.height, audit.valid, audit.unstable),
+    (2, 2, 4, 3),
+  )
+  assert_eq(audit.stability, [2, 2, 2, 0])
+  assert_eq((audit.min_change_m2, audit.max_change_m2), (0L, 900L))
+  let qa = after.qa.copy()
+  qa[5] = 8
+  let masked = @lib.alignment_stress(before, { ..after, qa, }, 0.15)
+  assert_eq(masked.stability, [-2, -2, -2, 0])
+  assert_eq((masked.valid, masked.valid_fraction), (1, 0.25))
+  let shifted = @lib.alignment_stress(
+    before,
+    { ..after, x: after.x + 30, },
+    0.15,
+  )
+  assert_eq(
+    (shifted.x, shifted.y, shifted.width, shifted.height),
+    (300060, 3499970, 2, 2),
+  )
+}

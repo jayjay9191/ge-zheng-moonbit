@@ -8,7 +8,7 @@
 在现有 MoonBit 工程中添加发布包。公开 API 见 [Mooncakes](https://mooncakes.io/docs/jayjay9191/ge-zheng-moonbit)。
 
 ```sh
-moon add jayjay9191/ge-zheng-moonbit@0.1.2
+moon add jayjay9191/ge-zheng-moonbit@0.2.0
 ```
 
 在源码仓库根目录运行以下命令，分别检查双样区结果和外部接口。Node.js 与 Python 版本见[从新检出复跑](#从新检出复跑)。
@@ -52,9 +52,30 @@ node gezheng.js data/feidong/scene-1.json data/feidong/scene-2.json 0.15 --qa-im
 
 先用 `python scripts/verify_local.py` 生成 `gezheng.js`。单机结果用于后续同环境回归比较。
 
+## 空间错位压力测试
+
+按对齐位置和东、西、南、北各一像元取第二期观测。五个情景共享同一内区和有效像元集合，某一情景被 QA 排除的像元从五组同时剔除。这样面积差异反映配对位置变化。行列偏移是对第二期栅格的取样方向。0.15 指绝对 ΔNDVI 阈值。一个像元是 30 米的压力参数，报告范围是所测五组的最小值与最大值。
+
+```sh
+moon run cmd/main -- data/nanjing/scene-1.json data/nanjing/scene-2.json 0.15 --shift-stress
+python scripts/verify_shift_stress.py
+```
+
+| 样区，启用 QA | 共同有效像元 | 分类受偏移影响 | 变化面积范围 |
+| --- | ---: | ---: | ---: |
+| 巢湖 | 13,772 | 1,720 | 9.4500–9.6579 km² |
+| 肥东 | 10,915 | 4,612 | 0.5715–1.9809 km² |
+| 南京 | 10,328 | 6,037 | 1.9917–3.6360 km² |
+
+[南京新增样区](data/nanjing/sources.json)采用 Landsat 9 轨道 120/038 的 2024-05-13、2024-10-04 两期产品。裁片尺寸为 128×128，清单记录原始资产网址、像元窗口与 SHA-256。巢湖和肥东用原有裁片。三地分别以启用 QA 和直接算复跑，共六组。Python 有理数逐像元对照分类、变动数量和地理窗口。
+
+`--shift-stress` 的 JSON 包含稳定性栅格。像元值 −1、0、1 表示五种配对一致为下降、阈值内或上升。2 表示偏移会改变分类，−2 表示无共同有效数据。保存为 UTF-8 JSON 后，使用 `python scripts/export_geotiff.py alignment.json output` 输出 GeoTIFF。安装 Rasterio 后用 `python scripts/verify_shift_stress.py --geotiff` 通过 GDAL 重新读回坐标、NoData、掩膜和每个像元。
+
+[USGS 配准说明](https://www.usgs.gov/landsat-missions/landsat-geometry)
+
 ## 初审核对
 
-在仓库根目录运行 `moon test review`。十三个 [公开接口案例](review/public_contract_test.mbt) 覆盖 QA 与陆地筛选、拒绝不守恒的矩阵、多档迁移和阈值容差。真实裁片可用下面的命令复跑。
+在仓库根目录运行 `moon test review`。十四个 [公开接口案例](review/public_contract_test.mbt) 覆盖 QA 与陆地筛选、拒绝不守恒的矩阵、多档迁移和阈值容差。真实裁片可用下面的命令复跑。
 
 运行 `python scripts/verify_analysis.py`。库源码排除 CLI、生成数据、测试、空行和注释后共 **1,878 行**，再排除纯标点行仍有 **1,558 行**。脚本逐文件报告计数并检查 500 行门槛。
 
