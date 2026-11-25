@@ -32,11 +32,17 @@ def export(source: Path, output: Path) -> tuple[Path, ...]:
                 value is not None and (type(value) not in (float, int) or not -2 <= value <= 2)
                 for value in values):
             raise ValueError("Invalid NDVI difference raster")
+        threshold = grid.get("threshold")
+        if type(threshold) not in (float, int) or not 0 < threshold <= 2:
+            raise ValueError("Invalid NDVI threshold")
+        for code, value in zip(codes, values, strict=True):
+            if (code == -2) != (value is None):
+                raise ValueError("Classification and difference masks disagree")
+            if value is not None and code != int(value >= threshold) - int(value <= -threshold):
+                raise ValueError("Classification disagrees with NDVI difference and threshold")
         classes = np.asarray(codes, dtype="int16").reshape(shape)
         delta = np.asarray([excluded if v is None else v for v in values],
                            dtype="float32").reshape(shape)
-        if not np.array_equal(classes == -2, delta == excluded):
-            raise ValueError("Classification and difference masks disagree")
         classes[classes == -2] = excluded
         layers = [("ndvi-class.tif", classes, "classification"), ("ndvi-delta.tif", delta, "NDVI delta")]
     output.mkdir(parents=True, exist_ok=True)

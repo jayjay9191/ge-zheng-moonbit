@@ -396,7 +396,7 @@ CLI 可用 `--min-coverage 0.70` 设门槛。肥东样例的共同有效覆盖�
 
 ### 导入 GIS 软件
 
-使用已安装 requirements-fetch.txt 的 Python，运行 `python scripts/export_geotiff.py results/feidong/screened.json results/feidong/gis`。两张 GeoTIFF 保留共同网格坐标，排除像元写 NoData。分类为 -1 下降、0 阈值内、1 上升，另一张保存实际 NDVI 差值。导出前拒绝异常分类码、非有限差值和两层掩膜不一致。完整脚本通过 GDAL 回读南京真实裁片的分类与差值，并逐像元和独立计算对照。
+使用已安装 requirements-fetch.txt 的 Python，运行 `python scripts/export_geotiff.py results/feidong/screened.json results/feidong/gis`。两张 GeoTIFF 保留共同网格坐标，排除像元写 NoData。分类为 -1 下降、0 阈值内、1 上升，另一张以 Float32 保存 NDVI 差值。导出前先用 JSON 原精度核对差值、阈值和分类是否一致，同时拒绝异常分类码、非有限差值和两层掩膜不一致。完整脚本通过 GDAL 回读南京真实裁片的分类与差值，并逐像元和独立计算对照。
 
 ### 分析本地 Landsat 裁片
 

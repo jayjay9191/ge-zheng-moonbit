@@ -2,6 +2,7 @@
 import argparse
 from fractions import Fraction
 import json
+import math
 from pathlib import Path
 from random import Random
 import subprocess
@@ -117,9 +118,21 @@ def verify_class_geotiff():
                         else:
                             assert abs(stored - float(delta)) < 1e-7
 
+        # Both sample values round to Float32 0.5, but only the exact
+        # threshold belongs to the gain class in the original JSON.
+        boundary = dict(actual, width=2, height=1, threshold=0.5,
+                        classes=[0, 1], delta=[math.nextafter(0.5, 0.0), 0.5])
+        source.write_text(json.dumps(boundary), encoding="utf-8")
+        class_path, delta_path = export(source, directory / "boundary")
+        with rasterio.open(class_path) as classes_at_cut, rasterio.open(delta_path) as rounded:
+            assert classes_at_cut.read(1).tolist() == [[0, 1]]
+            assert rounded.read(1).tolist() == [[0.5, 0.5]]
+
         sample = next(i for i, mask in enumerate(masks) if mask)
+        wrong_class = 0 if actual["classes"][sample] != 0 else 1
         for band, invalid in (("classes", 1.25), ("classes", 65537),
-                              ("delta", "0.5"), ("delta", float("nan")), ("delta", None)):
+                              ("classes", wrong_class), ("delta", "0.5"),
+                              ("delta", float("nan")), ("delta", None)):
             malformed = dict(actual)
             malformed[band] = actual[band].copy()
             malformed[band][sample] = invalid
