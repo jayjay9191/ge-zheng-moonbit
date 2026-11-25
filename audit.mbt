@@ -121,31 +121,45 @@ fn validate(c : Chip) -> Unit raise AuditError {
 
 ///|
 /// Landsat 8/9 Collection 2: QA_PIXEL bits 0–5, QA_RADSAT bits 3, 4, 11.
-fn pixel(c : Chip, index : Int32, screen_qa : Bool) -> (Int32, Double) {
+fn pixel(c : Chip, index : Int32, screen_qa : Bool) -> (Int32, Double, Double) {
   let qa = if screen_qa { c.qa[index] } else { 0 }
   let red = c.red[index]
   let nir = c.nir[index]
   if (qa & 1) != 0 || red == 0 || nir == 0 {
-    return (1, 0.0)
+    return (1, 0.0, 1.0)
   }
   if (qa & 14) != 0 {
-    return (2, 0.0)
+    return (2, 0.0, 1.0)
   }
   if (qa & 16) != 0 {
-    return (3, 0.0)
+    return (3, 0.0, 1.0)
   }
   if (qa & 32) != 0 {
-    return (4, 0.0)
+    return (4, 0.0, 1.0)
   }
   if screen_qa && (c.saturation[index] & 2072) != 0 {
-    return (5, 0.0)
+    return (5, 0.0, 1.0)
   }
-  let r = red.to_double() * 0.0000275 - 0.2
-  let n = nir.to_double() * 0.0000275 - 0.2
-  if red > 43636 || nir > 43636 || r < 0.0 || n < 0.0 || n + r <= 0.00000001 {
-    return (6, 0.0)
+  if red < 7273 || nir < 7273 || red > 43636 || nir > 43636 {
+    return (6, 0.0, 1.0)
   }
-  (0, (n - r) / (n + r))
+  // USGS surface reflectance is (11 * DN - 80000) / 400000.
+  // The common denominator cancels in NDVI.
+  let r = 11 * red - 80000
+  let n = 11 * nir - 80000
+  (0, (n - r).to_double(), (n + r).to_double())
+}
+
+///|
+// The ratio components are integer-valued. Products and the subtraction stay
+// below 2^53, so binary64 rounds only the final division.
+fn ndvi_difference(
+  before_num : Double,
+  before_den : Double,
+  after_num : Double,
+  after_den : Double,
+) -> Double {
+  (after_num * before_den - before_num * after_den) / (before_den * after_den)
 }
 
 ///|
@@ -304,11 +318,23 @@ fn compare_retained(
     for col in col0..<col1 {
       let ia = row * a.width + col
       let ib = (row - dy) * b.width + col - dx
-      let (reason_a, before) = pixel(a, ia, screen_qa)
-      let (reason_b, after) = pixel(b, ib, screen_qa)
+      let (reason_a, before_num, before_den) = pixel(a, ia, screen_qa)
+      let (reason_b, after_num, after_den) = pixel(b, ib, screen_qa)
       if retain_evidence {
-        ndvi_before.push(if reason_a == 0 { Some(before) } else { None })
-        ndvi_after.push(if reason_b == 0 { Some(after) } else { None })
+        ndvi_before.push(
+          if reason_a == 0 {
+            Some(before_num / before_den)
+          } else {
+            None
+          },
+        )
+        ndvi_after.push(
+          if reason_b == 0 {
+            Some(after_num / after_den)
+          } else {
+            None
+          },
+        )
         before_reason.push(reason_a)
         after_reason.push(reason_b)
       }
@@ -328,7 +354,7 @@ fn compare_retained(
           water_code.push(water)
         }
         water_counts[water] += 1
-        let d = after - before
+        let d = ndvi_difference(before_num, before_den, after_num, after_den)
         if retain_evidence {
           delta.push(Some(d))
         }
@@ -537,10 +563,10 @@ fn source_pixel(
   let grid_col = col0 + column - 1
   let ia = grid_row * a.width + grid_col
   let ib = (grid_row - dy) * b.width + grid_col - dx
-  let (reason_a, before) = pixel(a, ia, screen_qa)
-  let (reason_b, after) = pixel(b, ib, screen_qa)
+  let (reason_a, before_num, before_den) = pixel(a, ia, screen_qa)
+  let (reason_b, after_num, after_den) = pixel(b, ib, screen_qa)
   let expected_delta = if reason_a == 0 && reason_b == 0 {
-    Some(after - before)
+    Some(ndvi_difference(before_num, before_den, after_num, after_den))
   } else {
     None
   }
@@ -548,8 +574,16 @@ fn source_pixel(
     Some(d) => classify_change(d, threshold)
     None => -2
   }
-  let before_ndvi = if reason_a == 0 { Some(before) } else { None }
-  let after_ndvi = if reason_b == 0 { Some(after) } else { None }
+  let before_ndvi = if reason_a == 0 {
+    Some(before_num / before_den)
+  } else {
+    None
+  }
+  let after_ndvi = if reason_b == 0 {
+    Some(after_num / after_den)
+  } else {
+    None
+  }
   let water = if expected_delta is Some(_) {
     water_state(a, ia, b, ib)
   } else {

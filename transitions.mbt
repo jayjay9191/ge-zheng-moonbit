@@ -46,7 +46,7 @@ fn visit_ndvi_pairs(
   screen_qa : Bool,
   land_only : Bool,
   min_coverage : Double,
-  visit : (Int32, Int32, (Int32, Int32), Double, Double) -> Unit,
+  visit : (Int32, Int32, Double, Double) -> Unit,
 ) -> (Int32, Int32, Int32, Double) raise AuditError {
   validate_coverage(min_coverage)
   let { dx, dy, row0, row1, col0, col1, } = common_window(before, after)
@@ -56,8 +56,8 @@ fn visit_ndvi_pairs(
     for col in col0..<col1 {
       let ia = row * before.width + col
       let ib = (row - dy) * after.width + col - dx
-      let (reason_a, a) = pixel(before, ia, screen_qa)
-      let (reason_b, b) = pixel(after, ib, screen_qa)
+      let (reason_a, before_num, before_den) = pixel(before, ia, screen_qa)
+      let (reason_b, after_num, after_den) = pixel(after, ib, screen_qa)
       if reason_a != 0 || reason_b != 0 {
         continue
       }
@@ -65,7 +65,7 @@ fn visit_ndvi_pairs(
         water_excluded += 1
         continue
       }
-      visit(row, col, (ia, ib), a, b)
+      visit(row, col, before_num / before_den, after_num / after_den)
       valid += 1
     }
   }
@@ -94,7 +94,7 @@ pub fn ndvi_transitions(
     screen_qa,
     land_only,
     min_coverage,
-    (_, _, _, a, b) => {
+    (_, _, a, b) => {
       counts[ndvi_band(a, cut_points)][ndvi_band(b, cut_points)] += 1
     },
   )
@@ -540,7 +540,7 @@ pub fn ndvi_critical_margin(
     screen_qa,
     land_only,
     min_coverage,
-    (_, _, _, a, b) => {
+    (_, _, a, b) => {
       if a >= threshold {
         observed_net -= 1
         increase.push((a - threshold, false))
@@ -649,7 +649,6 @@ pub fn ndvi_neutralization_witness(
     visit_ndvi_pairs(before, after, screen_qa, land_only, min_coverage, (
       row,
       column,
-      _,
       a,
       b,
     ) => {
@@ -743,7 +742,6 @@ pub fn verify_ndvi_witness(
       visit_ndvi_pairs(before, after, screen_qa, land_only, min_coverage, (
         row,
         column,
-        _,
         a,
         b,
       ) => {
@@ -878,7 +876,6 @@ pub fn ndvi_budget_margins(
     visit_ndvi_pairs(before, after, screen_qa, land_only, min_coverage, (
       _,
       _,
-      _,
       a,
       b,
     ) => {
@@ -968,15 +965,6 @@ pub(all) struct NdviCalibrationBounds {
 }
 
 ///|
-fn calibration_ndvi(chip : Chip, i : Int32) -> Double {
-  let red = 11 * chip.red[i] - 80000
-  let nir = 11 * chip.nir[i] - 80000
-  // Collection 2 affine factors share a denominator of 400000.
-  // A single correctly rounded quotient preserves ties between DN ratios.
-  (nir - red).to_double() / (nir + red).to_double()
-}
-
-///|
 /// Apply the same additive NDVI offset to every valid observation on both dates.
 /// Equal NDVIs enter the upper class simultaneously.
 pub fn ndvi_calibration_bounds(
@@ -1014,9 +1002,9 @@ pub fn ndvi_calibration_bounds(
     screen_qa,
     land_only,
     min_coverage,
-    (_, _, indices, _, _) => {
-      observe(calibration_ndvi(before, indices.0), -1)
-      observe(calibration_ndvi(after, indices.1), 1)
+    (_, _, a, b) => {
+      observe(a, -1)
+      observe(b, 1)
     },
   )
   events.sort_by((a, b) => b.0.compare(a.0))

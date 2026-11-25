@@ -217,11 +217,13 @@ fn scan_alignment(
   let { dx, dy, col0, row0, col1, row1, } = window
   let width = col1 - col0
   let deltas = Array::make(offsets.length(), 0.0)
-  // Cache the second image's NDVI and QA for the three live scan rows.
+  // Cache the second image's NDVI components and QA for the three live scan rows.
   // The one-pixel halo is already proven to fit by alignment_window.
   let after_columns = width + 2
   let scan_start_col = col0 - dx - 1
-  let after_rows = Array::makei(3, _ => Array::make(after_columns, (0, 0.0)))
+  let after_rows = Array::makei(3, _ => {
+    Array::make(after_columns, (0, 0.0, 1.0))
+  })
   let load_after_row = (image_row, slot) => {
     let row_start = image_row * after.width + scan_start_col
     for col in 0..<after_columns {
@@ -235,7 +237,7 @@ fn scan_alignment(
     let scan_row = row - row0
     load_after_row(row - dy + 1, (scan_row + 2) % 3)
     for col in col0..<col1 {
-      let (reason, baseline) = pixel(
+      let (reason, before_num, before_den) = pixel(
         before,
         row * before.width + col,
         screen_qa,
@@ -246,7 +248,7 @@ fn scan_alignment(
       let mut available = true
       for i in 0..<offsets.length() {
         let (dc, dr) = offsets[i]
-        let (reason, observed) = after_rows[(scan_row + dr + 1) % 3][col -
+        let (reason, after_num, after_den) = after_rows[(scan_row + dr + 1) % 3][col -
           col0 +
           dc +
           1]
@@ -254,7 +256,9 @@ fn scan_alignment(
           available = false
           break
         }
-        deltas[i] = observed - baseline
+        deltas[i] = ndvi_difference(
+          before_num, before_den, after_num, after_den,
+        )
       }
       if available {
         valid += 1

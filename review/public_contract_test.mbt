@@ -596,3 +596,61 @@ test "alignment threshold sweep preserves repeated cutoffs and matches individua
   assert_eq(sweep.rows[1].bounds.opposite_direction, 1)
   assert_eq(sweep.rows[1].bounds.certain_change_m2, 0L)
 }
+
+///|
+test "decimal NDVI changes at the inclusive cutoff survive scaled reflectance" {
+  // These digital numbers give exactly 11/100 and 33/100 after scaling.
+  let first : @lib.Chip = {
+    scene: "cutoff-before",
+    date: "2024-09-09",
+    epsg: 32650,
+    x: 300000,
+    y: 3500000,
+    width: 3,
+    height: 3,
+    cell: 30,
+    red: Array::make(9, 12014),
+    nir: Array::make(9, 13186),
+    qa: Array::make(9, 0),
+    saturation: Array::make(9, 0),
+  }
+  let second = {
+    ..first,
+    scene: "cutoff-after",
+    date: "2024-09-25",
+    red: Array::make(9, 12048),
+    nir: Array::make(9, 16752),
+  }
+  let cut = 0.22
+  let next_cut = 0.22000000000000003
+  for (a, b, code) in [(first, second, 1), (second, first, -1)] {
+    let result = @lib.compare(a, b, cut)
+    assert_eq(result.classes, Array::make(9, code))
+    assert_true(
+      result.delta[0] is Some(actual) && actual == code.to_double() * cut,
+    )
+    assert_eq(@lib.inspect_sources(a, b, cut, 2, 2).class_code, code)
+    assert_eq(@lib.inspect_pixel(a, b, result, 2, 2).class_code, code)
+    assert_eq(@lib.compare(a, b, next_cut).stable, 9)
+    let sweep = @lib.sensitivity(a, b, [next_cut, cut])
+    assert_eq(sweep.rows[0].counts.stable, 9)
+    assert_eq(sweep.rows[1].counts.gain + sweep.rows[1].counts.loss, 9)
+    let (stress, _) = @lib.alignment_stress_with_bounds(
+      a,
+      b,
+      cut,
+      include_diagonals=true,
+    )
+    assert_eq(stress.stability, [code])
+    let alignment = @lib.alignment_threshold_sweep(
+      a,
+      b,
+      [cut, next_cut],
+      include_diagonals=true,
+    )
+    assert_eq(alignment.rows[0].bounds.certain_change_m2, 900L)
+    assert_eq(alignment.rows[1].bounds.possible_change_m2, 0L)
+  }
+  let transitions = @lib.ndvi_transitions(first, second, [0.11, 0.33])
+  assert_eq(transitions.counts, [[0, 0, 0], [0, 0, 9], [0, 0, 0]])
+}

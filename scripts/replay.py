@@ -63,7 +63,7 @@ def verify(result, a, b, threshold, screen_qa=True):
             if value is None:
                 assert actual is None, (field, i)
             else:
-                assert abs(float(value) - actual) < 1e-12, (field, i)
+                assert actual == float(value), (field, i, actual, float(value))
         if x is None or y is None:
             label = -2
             assert result["water_code"][i] == -1
@@ -79,7 +79,7 @@ def verify(result, a, b, threshold, screen_qa=True):
             if code == 0:
                 land_change[label] += 1
             err = abs(float(d) - result["delta"][i])
-            assert err < 1e-12, (i, err)
+            assert err == 0.0, (i, err)
             max_error = max(max_error, err)
         assert result["classes"][i] == label, i
         counts[label] += 1

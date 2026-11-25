@@ -97,8 +97,12 @@ fn count_thresholds(
   let mut valid = 0
   for row in row0..<row1 {
     for col in col0..<col1 {
-      let (reason_a, a) = pixel(before, row * before.width + col, screen_qa)
-      let (reason_b, b) = pixel(
+      let (reason_a, before_num, before_den) = pixel(
+        before,
+        row * before.width + col,
+        screen_qa,
+      )
+      let (reason_b, after_num, after_den) = pixel(
         after,
         (row - dy) * after.width + col - dx,
         screen_qa,
@@ -107,7 +111,7 @@ fn count_thresholds(
         continue
       }
       valid += 1
-      let delta = b - a
+      let delta = ndvi_difference(before_num, before_den, after_num, after_den)
       let magnitude = if delta < 0.0 { -delta } else { delta }
       let lo = thresholds_met(thresholds, ordered, magnitude)
       if lo > 0 {

@@ -4,7 +4,9 @@ from collections import Counter
 from fractions import Fraction
 from itertools import accumulate, product
 import json
+from math import inf, nextafter
 from pathlib import Path
+from random import Random
 import subprocess
 from tempfile import TemporaryDirectory
 
@@ -205,6 +207,34 @@ def verify_shifted():
         run_pair(paths, "--summary", success=False, threshold="0.1")
         print("PASS QA impact reports fully masked windows; coverage floor and change classification still reject")
     print("PASS shifted 3x2 window, exact threshold equality, reverse direction and repeated cutoffs")
+
+
+def verify_decimal_cutoffs():
+    # An even total and an even difference produce integer Landsat DNs
+    # with NDVI exactly k*0.11. Use different totals for different pixels.
+    rng = Random(20261125)
+    size = 20 * 20
+    before = dict(scene="boundary-before", date="2024-04-18", epsg=32650, x=300000, y=3500000,
+                  width=20, height=20, cell=30, red=[], nir=[], qa=[0] * size, saturation=[0] * size)
+    for i in range(size):
+        total = 200 * rng.randrange(82, 160)
+        k = rng.randrange(-6, 7)
+        delta = k * ((11 * total - 160000) // 100)
+        before["red"].append((total - delta) // 2)
+        before["nir"].append((total + delta) // 2)
+        assert reference_pixel(before, i) == Fraction(11 * k, 100)
+    after = dict(before, scene="boundary-after", date="2024-05-04",
+                 red=before["red"][::-1], nir=before["nir"][::-1])
+    cuts = [cut for value in (0.11, 0.22, 0.44, 0.66)
+            for cut in (nextafter(value, 0), value, nextafter(value, inf))]
+    with TemporaryDirectory(dir=ROOT / "_build") as folder:
+        paths = [Path(folder) / f"{day}.json" for day in (1, 2)]
+        for path, chip in zip(paths, (before, after), strict=True):
+            path.write_text(json.dumps(chip), encoding="utf-8")
+        for cut in cuts:
+            result = run_pair(paths, threshold=repr(cut))
+            verify(result, before, after, cut)
+    print(f"PASS {size * len(cuts):,} signed NDVI classifications at decimal thresholds and adjacent Doubles")
 
 
 def main():
@@ -572,6 +602,7 @@ def main():
         print(f"PASS {folder}: sweep, QA impact {changed_before} -> {changed_after}, 3 tile shapes")
     print(f"PASS independent Fraction replay: {compared:,} pixel comparisons; max delta error {max_error:.3g}")
     verify_shifted()
+    verify_decimal_cutoffs()
     for flags in (("--sweep", "0"), ("--sweep", ""), ("--sweep", "2.01"),
                   ("--tiles", "0x2"), ("--tiles", "2"), ("--tiles",),
                   ("--tiles", "129x2"), ("--sweep", "--qa-impact"),
