@@ -99,6 +99,15 @@ def main():
             areas = [900 * (scan.count(1) + scan.count(-1)) for scan in scans]
             assert (int(actual["min_change_m2"]), int(actual["max_change_m2"])) == (min(areas), max(areas))
             assert actual["unstable"] == codes.count(2)
+            votes = [set(pixel) for pixel in zip(*scans, strict=True)]
+            lower = 900 * sum(0 not in vote for vote in votes)
+            upper = 900 * sum(bool(vote - {0}) for vote in votes)
+            flips = sum({-1, 1} <= vote for vote in votes)
+            bounds = actual["pixelwise_change_bounds"]
+            assert (int(bounds["certain_change_m2"]), int(bounds["possible_change_m2"]),
+                    bounds["opposite_direction"]) == (lower, upper, flips)
+            assert lower <= min(areas) <= max(areas) <= upper
+            print(f"pixelwise bounds: {lower}..{upper} m^2; {flips} opposite-direction pixels")
             print(f"{folder} QA={screen}: {valid} valid, {codes.count(2)} unstable, range {min(areas)}..{max(areas)} m^2")
     paths, _ = load_pair(ROOT, ROOT / "data/feidong/sources.json")
     assert "below minimum" in run(*paths, 0.15, "--shift-stress", "--min-coverage", 1, ok=False)

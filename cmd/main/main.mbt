@@ -271,14 +271,18 @@ fn main {
       fail("--qa-impact compares both QA policies; do not also select --direct")
     }
     if shift_stress {
-      let result = @audit.alignment_stress(
+      let (result, bounds) = @audit.alignment_stress_with_bounds(
         before,
         after,
         threshold,
         screen_qa=!direct,
         min_coverage=minimum,
       )
-      println(Json(result).stringify())
+      let response = Json(result)
+      if response is Object(fields) {
+        fields["pixelwise_change_bounds"] = Json(bounds)
+      }
+      println(response.stringify())
       return
     }
     if transition is Some(cuts) {

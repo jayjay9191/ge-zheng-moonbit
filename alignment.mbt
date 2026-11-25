@@ -32,6 +32,14 @@ pub(all) struct AlignmentStress {
 }
 
 ///|
+#derive(ToJson)
+pub(all) struct AlignmentChangeBounds {
+  certain_change_m2 : Int64
+  possible_change_m2 : Int64
+  opposite_direction : Int32
+}
+
+///|
 /// Sample the second chip at the aligned location and its four immediate
 /// neighbours. All scenarios share the same footprint and valid population.
 /// The stability raster uses -2 for masked cells, -1/0/1 for unanimous
@@ -43,6 +51,27 @@ pub fn alignment_stress(
   screen_qa~ : Bool = true,
   min_coverage~ : Double = 0.0,
 ) -> AlignmentStress raise AuditError {
+  let (stress, _) = alignment_stress_with_bounds(
+    before,
+    after,
+    threshold,
+    screen_qa~,
+    min_coverage~,
+  )
+  stress
+}
+
+///|
+/// Intersect and union the per-pixel change sets across the five offsets.
+/// The lower and upper bounds allow each pixel to take a different offset.
+/// Opposite-direction pixels meet both the gain and the loss criterion.
+pub fn alignment_stress_with_bounds(
+  before : Chip,
+  after : Chip,
+  threshold : Double,
+  screen_qa~ : Bool = true,
+  min_coverage~ : Double = 0.0,
+) -> (AlignmentStress, AlignmentChangeBounds) raise AuditError {
   validate_threshold(threshold)
   validate_coverage(min_coverage)
   let window = common_window(before, after)
@@ -63,6 +92,9 @@ pub fn alignment_stress(
   let stability = Array::make(width * height, -2)
   let mut valid = 0
   let mut unstable = 0
+  let mut certain = 0
+  let mut possible = 0
+  let mut opposite = 0
   for row in row0..<row1 {
     for col in col0..<col1 {
       let (reason, baseline) = pixel(
@@ -88,8 +120,14 @@ pub fn alignment_stress(
         continue
       }
       valid += 1
+      let mut lowest = 1
+      let mut highest = -1
+      let mut any_stable = false
       let mut agrees = true
       for i in 0..<offsets.length() {
+        lowest = lowest.min(classes[i])
+        highest = highest.max(classes[i])
+        any_stable = any_stable || classes[i] == 0
         if classes[i] == 1 {
           gain[i] += 1
         } else if classes[i] == -1 {
@@ -99,6 +137,15 @@ pub fn alignment_stress(
           differences[i] += 1
           agrees = false
         }
+      }
+      if !any_stable {
+        certain += 1
+      }
+      if lowest < 0 || highest > 0 {
+        possible += 1
+      }
+      if lowest < 0 && highest > 0 {
+        opposite += 1
       }
       stability[(row - row0) * width + col - col0] = if agrees {
         classes[0]
@@ -126,7 +173,7 @@ pub fn alignment_stress(
       different_from_base: differences[i],
     })
   }
-  {
+  let stress = {
     first_scene: before.scene,
     second_scene: after.scene,
     epsg: before.epsg,
@@ -145,4 +192,10 @@ pub fn alignment_stress(
     scenarios,
     stability,
   }
+  let bounds = {
+    certain_change_m2: certain.to_int64() * 900L,
+    possible_change_m2: possible.to_int64() * 900L,
+    opposite_direction: opposite,
+  }
+  (stress, bounds)
 }

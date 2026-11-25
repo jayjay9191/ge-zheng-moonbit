@@ -71,6 +71,25 @@ python scripts/verify_shift_stress.py
 
 `--shift-stress` 的 JSON 包含稳定性栅格。像元值 −1、0、1 表示五种配对一致为下降、阈值内或上升。2 表示偏移会改变分类，−2 表示无共同有效数据。保存为 UTF-8 JSON 后，使用 `python scripts/export_geotiff.py alignment.json output` 输出 GeoTIFF。安装 Rasterio 后用 `python scripts/verify_shift_stress.py --geotiff` 通过 GDAL 重新读回坐标、NoData、掩膜和每个像元。
 
+### 逐像元变化面积上下界
+
+在同一个共同有效区内，对五种情景的变化掩膜取交集和并集。交集面积
+`certain_change_m2` 计入五种取样都超过阈值的像元，即使其中方向反转。
+并集面积 `possible_change_m2` 计入至少一种取样超过阈值的像元。
+`opposite_direction` 计数同时出现过上升和下降的像元。公开接口
+`alignment_stress_with_bounds` 同时返回既有情景分析与新的上下界，CLI 在
+`pixelwise_change_bounds` 中输出新字段。
+
+| 启用 QA | 五种整图统一偏移下的变化面积 | 允许逐像元选择偏移的上下界 | 方向反转像元 |
+| --- | ---: | ---: | ---: |
+| 巢湖 | 9.4500–9.6579 km² | 8.7408–10.2861 km² | 46 |
+| 肥东 | 0.5715–1.9809 km² | 0.2016–4.3389 km² | 437 |
+| 南京 | 1.9917–3.6360 km² | 1.2348–6.5115 km² | 1,412 |
+
+逐像元上下界允许各位置取不同偏移，因此范围更宽。两种范围均针对这五种
+假设取样和共同有效区。独立脚本用 Python 有理数重新计算掩膜与交并集，
+并检查每组整图面积都落在逐像元上下界内。
+
 [USGS 配准说明](https://www.usgs.gov/landsat-missions/landsat-geometry)
 
 ## 初审核对

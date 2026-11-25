@@ -9,6 +9,8 @@ import {
 // Values
 pub fn alignment_stress(Chip, Chip, Double, screen_qa? : Bool, min_coverage? : Double) -> AlignmentStress raise AuditError
 
+pub fn alignment_stress_with_bounds(Chip, Chip, Double, screen_qa? : Bool, min_coverage? : Double) -> (AlignmentStress, AlignmentChangeBounds) raise AuditError
+
 pub fn change_regions(Audit, connectivity? : Int32, min_pixels? : Int32, land_only? : Bool) -> ChangeRegions raise AuditError
 
 pub fn compare(Chip, Chip, Double, screen_qa? : Bool, min_coverage? : Double, pixel_grids? : Bool) -> Audit raise AuditError
@@ -56,6 +58,13 @@ pub suberror AuditError {
 }
 
 // Types and methods
+#derive(@json.ToJson)
+pub(all) struct AlignmentChangeBounds {
+  certain_change_m2 : Int64
+  possible_change_m2 : Int64
+  opposite_direction : Int32
+}
+
 #derive(@json.ToJson)
 pub(all) struct AlignmentStress {
   first_scene : String

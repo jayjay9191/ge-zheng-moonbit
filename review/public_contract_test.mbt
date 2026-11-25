@@ -458,3 +458,44 @@ test "alignment stress keeps one valid population across all five offsets" {
     (300060, 3499970, 2, 2),
   )
 }
+
+///|
+test "pixelwise change bounds distinguish certain magnitude from uncertain sign" {
+  let chip : @lib.Chip = {
+    scene: "before",
+    date: "2024-09-09",
+    epsg: 32650,
+    x: 300000,
+    y: 3500000,
+    width: 5,
+    height: 3,
+    cell: 30,
+    red: Array::make(15, 20000),
+    nir: Array::make(15, 20000),
+    qa: Array::make(15, 0),
+    saturation: Array::make(15, 0),
+  }
+  let nir = Array::make(15, 35000)
+  nir[5] = 8000
+  nir[9] = 20000
+  let after = { ..chip, scene: "after", date: "2024-09-25", nir, }
+  let (stress, bounds) = @lib.alignment_stress_with_bounds(chip, after, 0.15)
+  assert_eq(stress.stability, [2, 1, 2])
+  assert_eq(
+    (bounds.certain_change_m2, bounds.possible_change_m2),
+    (1800L, 2700L),
+  )
+  assert_eq(bounds.opposite_direction, 1)
+  let qa = after.qa.copy()
+  qa[5] = 8
+  let (_, masked) = @lib.alignment_stress_with_bounds(
+    chip,
+    { ..after, qa, },
+    0.15,
+  )
+  assert_eq(
+    (masked.certain_change_m2, masked.possible_change_m2),
+    (900L, 1800L),
+  )
+  assert_eq(masked.opposite_direction, 0)
+}
