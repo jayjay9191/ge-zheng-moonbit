@@ -90,6 +90,27 @@ python scripts/verify_shift_stress.py
 假设取样和共同有效区。独立脚本用 Python 有理数重新计算掩膜与交并集，
 并检查每组整图面积都落在逐像元上下界内。
 
+### 对角偏移补测
+
+在 `--shift-stress` 后加 `--include-diagonals`，可检查完整 3×3 取样窗口。
+所有九个情景仍共享有效像元集合，公开接口可传 `include_diagonals=true`。
+
+```sh
+moon run cmd/main -- data/nanjing/scene-1.json data/nanjing/scene-2.json 0.15 --shift-stress --include-diagonals
+python scripts/verify_shift_stress.py --geotiff
+```
+
+| 样区，启用 QA | 九种取样均有效 | 同一批像元中因补测对角而判为不稳定 | 九种取样的像元级变化面积上下界 |
+| --- | ---: | ---: | ---: |
+| 巢湖 | 13,766 | 723 | 8.4015–10.5939 km² |
+| 肥东 | 10,915 | 1,672 | 0.1260–5.7735 km² |
+| 南京 | 10,160 | 1,654 | 1.0485–7.7409 km² |
+
+比较时先固定九种取样均有效的像元，再统计在仅看水平、垂直和原位时分类一致，
+加入对角后分类不一致的像元。独立脚本复算三地、两种 QA 设置、两种偏移方式，
+并通过 GDAL 验证 GeoTIFF 坐标、掩膜和像元值。对角取样在每个轴上偏移 30 米，
+直线距离约 42.4 米，属于压力测试设定。
+
 [USGS 配准说明](https://www.usgs.gov/landsat-missions/landsat-geometry)
 
 ## 初审核对

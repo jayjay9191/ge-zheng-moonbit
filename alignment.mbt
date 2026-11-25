@@ -62,7 +62,8 @@ pub fn alignment_stress(
 }
 
 ///|
-/// Intersect and union the per-pixel change sets across the five offsets.
+/// Intersect and union the per-pixel change sets across the tested offsets.
+/// Optionally include the four diagonal neighbours in the same valid footprint.
 /// The lower and upper bounds allow each pixel to take a different offset.
 /// Opposite-direction pixels meet both the gain and the loss criterion.
 pub fn alignment_stress_with_bounds(
@@ -71,6 +72,7 @@ pub fn alignment_stress_with_bounds(
   threshold : Double,
   screen_qa~ : Bool = true,
   min_coverage~ : Double = 0.0,
+  include_diagonals~ : Bool = false,
 ) -> (AlignmentStress, AlignmentChangeBounds) raise AuditError {
   validate_threshold(threshold)
   validate_coverage(min_coverage)
@@ -82,13 +84,19 @@ pub fn alignment_stress_with_bounds(
   let width = col1 - col0
   let height = row1 - row0
   if width <= 0 || height <= 0 {
-    raise Invalid("no common footprint for the four one-pixel offsets")
+    raise Invalid("no common footprint for the one-pixel offsets")
   }
   let offsets = [(0, 0), (1, 0), (-1, 0), (0, 1), (0, -1)]
-  let gain = Array::make(5, 0)
-  let loss = Array::make(5, 0)
-  let differences = Array::make(5, 0)
-  let classes = Array::make(5, 0)
+  if include_diagonals {
+    offsets.push((1, 1))
+    offsets.push((1, -1))
+    offsets.push((-1, 1))
+    offsets.push((-1, -1))
+  }
+  let gain = Array::make(offsets.length(), 0)
+  let loss = Array::make(offsets.length(), 0)
+  let differences = Array::make(offsets.length(), 0)
+  let classes = Array::make(offsets.length(), 0)
   let stability = Array::make(width * height, -2)
   let mut valid = 0
   let mut unstable = 0

@@ -1,4 +1,4 @@
-"""Independent offset classifier for the fixed five-position stress test."""
+"""Independent offset classifier for five- and nine-position stress tests."""
 import argparse
 from fractions import Fraction
 import json
@@ -20,19 +20,19 @@ def ndvi(chip, index, screen):
     return Fraction(11 * (nir - red), 11 * (nir + red) - 160000)
 
 
-def reference(a, b, cut, screen):
+def reference(a, b, cut, screen, offsets):
     # Derive candidate indices independently from absolute easting and northing.
     dx = (b["x"] - a["x"]) // a["cell"]
     dy = (a["y"] - b["y"]) // a["cell"]
     xs = range(max(0, dx + 1), min(a["width"], dx + b["width"] - 1))
     ys = range(max(0, dy + 1), min(a["height"], dy + b["height"] - 1))
-    scans = [[] for _ in OFFSETS]
+    scans = [[] for _ in offsets]
     codes = []
     for row in ys:
         for col in xs:
             previous = ndvi(a, row * a["width"] + col, screen)
             values = [ndvi(b, (row - dy + dr) * b["width"] + col - dx + dc, screen)
-                      for dc, dr in OFFSETS]
+                      for dc, dr in offsets]
             if previous is None or None in values:
                 codes.append(-2)
                 continue
@@ -78,40 +78,52 @@ def main():
     for folder in ("data", "data/feidong", "data/nanjing"):
         paths, (a, b) = load_pair(ROOT, ROOT / folder / "sources.json")
         for screen in (True, False):
-            xs, ys, scans, codes = reference(a, b, Fraction(3, 20), screen)
-            flags = [] if screen else ["--direct"]
-            actual = run(*paths, 0.15, "--shift-stress", *flags)
-            assert actual["stability"] == codes
-            if args.geotiff:
-                verify_geotiff(actual, a, b, xs, ys, codes)
-            valid = len(scans[0])
-            assert actual["valid"] == valid
-            assert actual["width"] == len(xs) and actual["height"] == len(ys)
-            assert actual["x"] == a["x"] + xs.start * 30
-            assert actual["y"] == a["y"] - ys.start * 30
-            assert actual["epsg"] == a["epsg"] and actual["cell"] == 30
-            assert [(s["dc"], s["dr"]) for s in actual["scenarios"]] == OFFSETS
-            for scenario, scan in zip(actual["scenarios"], scans, strict=True):
-                assert (scenario["gain"], scenario["loss"], scenario["stable"]) == (
-                    scan.count(1), scan.count(-1), scan.count(0))
-                assert scenario["different_from_base"] == sum(
-                    x != y for x, y in zip(scan, scans[0], strict=True))
-            areas = [900 * (scan.count(1) + scan.count(-1)) for scan in scans]
-            assert (int(actual["min_change_m2"]), int(actual["max_change_m2"])) == (min(areas), max(areas))
-            assert actual["unstable"] == codes.count(2)
-            votes = [set(pixel) for pixel in zip(*scans, strict=True)]
-            lower = 900 * sum(0 not in vote for vote in votes)
-            upper = 900 * sum(bool(vote - {0}) for vote in votes)
-            flips = sum({-1, 1} <= vote for vote in votes)
-            bounds = actual["pixelwise_change_bounds"]
-            assert (int(bounds["certain_change_m2"]), int(bounds["possible_change_m2"]),
-                    bounds["opposite_direction"]) == (lower, upper, flips)
-            assert lower <= min(areas) <= max(areas) <= upper
-            print(f"pixelwise bounds: {lower}..{upper} m^2; {flips} opposite-direction pixels")
-            print(f"{folder} QA={screen}: {valid} valid, {codes.count(2)} unstable, range {min(areas)}..{max(areas)} m^2")
+            for diagonals in (False, True):
+                offsets = OFFSETS + [(dc, dr) for dc in (1, -1) for dr in (1, -1)] if diagonals else OFFSETS
+                xs, ys, scans, codes = reference(a, b, Fraction(3, 20), screen, offsets)
+                flags = [] if screen else ["--direct"]
+                if diagonals:
+                    flags.append("--include-diagonals")
+                actual = run(*paths, 0.15, "--shift-stress", *flags)
+                assert actual["stability"] == codes
+                if args.geotiff:
+                    verify_geotiff(actual, a, b, xs, ys, codes)
+                valid = len(scans[0])
+                assert actual["valid"] == valid
+                assert actual["width"] == len(xs) and actual["height"] == len(ys)
+                assert actual["x"] == a["x"] + xs.start * 30
+                assert actual["y"] == a["y"] - ys.start * 30
+                assert actual["epsg"] == a["epsg"] and actual["cell"] == 30
+                assert [(s["dc"], s["dr"]) for s in actual["scenarios"]] == offsets
+                for scenario, scan in zip(actual["scenarios"], scans, strict=True):
+                    assert (scenario["gain"], scenario["loss"], scenario["stable"]) == (
+                        scan.count(1), scan.count(-1), scan.count(0))
+                    assert scenario["different_from_base"] == sum(
+                        x != y for x, y in zip(scan, scans[0], strict=True))
+                areas = [900 * (scan.count(1) + scan.count(-1)) for scan in scans]
+                assert (int(actual["min_change_m2"]), int(actual["max_change_m2"])) == (min(areas), max(areas))
+                assert actual["unstable"] == codes.count(2)
+                votes = [set(pixel) for pixel in zip(*scans, strict=True)]
+                lower = 900 * sum(0 not in vote for vote in votes)
+                upper = 900 * sum(bool(vote - {0}) for vote in votes)
+                flips = sum({-1, 1} <= vote for vote in votes)
+                bounds = actual["pixelwise_change_bounds"]
+                assert (int(bounds["certain_change_m2"]), int(bounds["possible_change_m2"]),
+                        bounds["opposite_direction"]) == (lower, upper, flips)
+                assert lower <= min(areas) <= max(areas) <= upper
+                print(f"{folder} QA={screen} offsets={len(offsets)}: {valid} valid, "
+                      f"{codes.count(2)} unstable, pixelwise bounds {lower}..{upper} m^2, {flips} sign flips")
+                if diagonals:
+                    assert valid <= axial_valid
+                    extra = sum(len(set(row[:5])) == 1 and len(set(row)) > 1
+                                for row in zip(*scans, strict=True))
+                    print(f"  same nine-position footprint: {extra} newly unstable due to diagonals")
+                else:
+                    axial_valid = valid
     paths, _ = load_pair(ROOT, ROOT / "data/feidong/sources.json")
     assert "below minimum" in run(*paths, 0.15, "--shift-stress", "--min-coverage", 1, ok=False)
     assert "choose only one" in run(*paths, 0.15, "--shift-stress", "--summary", ok=False)
+    assert "requires --shift-stress" in run(*paths, 0.15, "--include-diagonals", ok=False)
 
 
 if __name__ == "__main__":

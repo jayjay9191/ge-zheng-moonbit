@@ -9,7 +9,7 @@ import {
 // Values
 pub fn alignment_stress(Chip, Chip, Double, screen_qa? : Bool, min_coverage? : Double) -> AlignmentStress raise AuditError
 
-pub fn alignment_stress_with_bounds(Chip, Chip, Double, screen_qa? : Bool, min_coverage? : Double) -> (AlignmentStress, AlignmentChangeBounds) raise AuditError
+pub fn alignment_stress_with_bounds(Chip, Chip, Double, screen_qa? : Bool, min_coverage? : Double, include_diagonals? : Bool) -> (AlignmentStress, AlignmentChangeBounds) raise AuditError
 
 pub fn change_regions(Audit, connectivity? : Int32, min_pixels? : Int32, land_only? : Bool) -> ChangeRegions raise AuditError
 

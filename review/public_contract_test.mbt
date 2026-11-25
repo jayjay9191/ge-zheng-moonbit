@@ -499,3 +499,55 @@ test "pixelwise change bounds distinguish certain magnitude from uncertain sign"
   )
   assert_eq(masked.opposite_direction, 0)
 }
+
+///|
+test "square sampling detects diagonal-only change and excludes corner clouds" {
+  let before : @lib.Chip = {
+    scene: "before",
+    date: "2024-09-09",
+    epsg: 32650,
+    x: 300000,
+    y: 3500000,
+    width: 3,
+    height: 3,
+    cell: 30,
+    red: Array::make(9, 20000),
+    nir: Array::make(9, 20000),
+    qa: Array::make(9, 0),
+    saturation: Array::make(9, 0),
+  }
+  let nir = before.nir.copy()
+  nir[0] = 35000
+  nir[8] = 8000
+  let after = { ..before, scene: "after", date: "2024-09-25", nir, }
+  let (cross, _) = @lib.alignment_stress_with_bounds(before, after, 0.15)
+  let (square, bounds) = @lib.alignment_stress_with_bounds(
+    before,
+    after,
+    0.15,
+    include_diagonals=true,
+  )
+  assert_eq(cross.stability, [0])
+  assert_eq(square.stability, [2])
+  assert_eq(square.scenarios.length(), 9)
+  assert_eq((bounds.possible_change_m2, bounds.opposite_direction), (900L, 1))
+  let qa = after.qa.copy()
+  qa[0] = 8
+  let cloudy = { ..after, qa, }
+  assert_eq(@lib.alignment_stress(before, cloudy, 0.15).valid, 1)
+  assert_true(
+    try {
+      ignore(
+        @lib.alignment_stress_with_bounds(
+          before,
+          cloudy,
+          0.15,
+          include_diagonals=true,
+        ),
+      )
+      false
+    } catch {
+      _ => true
+    },
+  )
+}

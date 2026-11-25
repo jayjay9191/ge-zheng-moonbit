@@ -29,7 +29,7 @@ fn main {
   let start = if args.length() > 2 && args[2] == "--" { 3 } else { 2 }
   if args.length() < start + 3 {
     println(
-      "Usage: moon run cmd/main -- <before.json> <after.json> <NDVI threshold | --transitions <cuts> [--margin <NDVI tolerance> [--witness | --verify-witness <file>] | --margins <list> | --critical-margin | --calibration-margin <tolerance> | --pair-budget <count> | --pair-budgets <list>]] [--direct] [--min-coverage <fraction>] [--inspect <row> <column> | --summary | --sweep [0.10,0.15,0.20] | --qa-impact | --shift-stress | --tiles 2x2 | --regions [4|8] [--min-region-pixels <pixels>] [--land-only]]",
+      "Usage: moon run cmd/main -- <before.json> <after.json> <NDVI threshold | --transitions <cuts> [--margin <NDVI tolerance> [--witness | --verify-witness <file>] | --margins <list> | --critical-margin | --calibration-margin <tolerance> | --pair-budget <count> | --pair-budgets <list>]] [--direct] [--min-coverage <fraction>] [--inspect <row> <column> | --summary | --sweep [0.10,0.15,0.20] | --qa-impact | --shift-stress [--include-diagonals] | --tiles 2x2 | --regions [4|8] [--min-region-pixels <pixels>] [--land-only]]",
     )
     @env.exit(2)
   }
@@ -50,6 +50,7 @@ fn main {
     let mut sweep : Array[Double]? = None
     let mut impact = false
     let mut shift_stress = false
+    let mut include_diagonals = false
     let mut regions : Int32? = None
     let mut region_min : Int32? = None
     let mut land_only = false
@@ -110,6 +111,7 @@ fn main {
         }
         "--summary" => summary = true
         "--shift-stress" => shift_stress = true
+        "--include-diagonals" => include_diagonals = true
         "--qa-impact" => impact = true
         "--sweep" => {
           let thresholds : Array[Double] = [0.10, 0.15, 0.20]
@@ -270,6 +272,9 @@ fn main {
     if impact && direct {
       fail("--qa-impact compares both QA policies; do not also select --direct")
     }
+    if include_diagonals && !shift_stress {
+      fail("--include-diagonals requires --shift-stress")
+    }
     if shift_stress {
       let (result, bounds) = @audit.alignment_stress_with_bounds(
         before,
@@ -277,6 +282,7 @@ fn main {
         threshold,
         screen_qa=!direct,
         min_coverage=minimum,
+        include_diagonals~,
       )
       let response = Json(result)
       if response is Object(fields) {
