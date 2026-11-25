@@ -16,16 +16,24 @@ def export(source: Path, output: Path) -> tuple[Path, ...]:
     excluded = -32768
     if "stability" in grid:
         codes = grid["stability"]
-        if len(codes) != shape[0] * shape[1] or any(code not in (-2, -1, 0, 1, 2) for code in codes):
+        if len(codes) != shape[0] * shape[1] or any(
+                type(code) is not int or code not in (-2, -1, 0, 1, 2) for code in codes):
             raise ValueError("Invalid alignment stability raster")
         stability = np.asarray(codes, dtype="int16").reshape(shape)
         stability[stability == -2] = excluded
         layers = [("ndvi-shift-stability.tif", stability, "NDVI alignment stability")]
     else:
-        if len(grid["classes"]) != shape[0] * shape[1]:
-            raise ValueError("A pixel-grid audit result is required")
-        classes = np.asarray(grid["classes"], dtype="int16").reshape(shape)
-        delta = np.asarray([excluded if v is None else v for v in grid["delta"]],
+        codes, values = grid["classes"], grid["delta"]
+        size = shape[0] * shape[1]
+        if len(codes) != size or any(
+                type(code) is not int or code not in (-2, -1, 0, 1) for code in codes):
+            raise ValueError("Invalid NDVI classification raster")
+        if len(values) != size or any(
+                value is not None and (type(value) not in (float, int) or not -2 <= value <= 2)
+                for value in values):
+            raise ValueError("Invalid NDVI difference raster")
+        classes = np.asarray(codes, dtype="int16").reshape(shape)
+        delta = np.asarray([excluded if v is None else v for v in values],
                            dtype="float32").reshape(shape)
         if not np.array_equal(classes == -2, delta == excluded):
             raise ValueError("Classification and difference masks disagree")

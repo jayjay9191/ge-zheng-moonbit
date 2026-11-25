@@ -73,6 +73,67 @@ def verify_geotiff(actual, a, b, xs, ys, codes):
             assert raster.tags()["before"] == a["scene"] and raster.tags()["after"] == b["scene"]
 
 
+def verify_class_geotiff():
+    import rasterio
+    from export_geotiff import export
+
+    paths, (a, b) = load_pair(ROOT, ROOT / "data/nanjing/sources.json")
+    cut = Fraction(3, 20)
+    actual = run(*paths, float(cut))
+    dx = (b["x"] - a["x"]) // 30
+    dy = (a["y"] - b["y"]) // 30
+    xs = range(max(0, dx), min(a["width"], dx + b["width"]))
+    ys = range(max(0, dy), min(a["height"], dy + b["height"]))
+    expected = []
+    for row in ys:
+        for col in xs:
+            before = ndvi(a, row * a["width"] + col, True)
+            after = ndvi(b, (row - dy) * b["width"] + col - dx, True)
+            expected.append(None if before is None or after is None else after - before)
+    classes = [-32768 if delta is None else int(delta >= cut) - int(delta <= -cut)
+               for delta in expected]
+    masks = [0 if delta is None else 255 for delta in expected]
+
+    with TemporaryDirectory() as temp:
+        directory = Path(temp)
+        source = directory / "class.json"
+        source.write_text(json.dumps(actual), encoding="utf-8")
+        class_path, delta_path = export(source, directory)
+        for path in (class_path, delta_path):
+            with rasterio.open(path) as raster:
+                assert raster.crs.to_epsg() == a["epsg"]
+                assert raster.shape == (len(ys), len(xs))
+                assert tuple(raster.transform)[:6] == (30, 0, a["x"] + 30 * xs.start,
+                                                       0, -30, a["y"] - 30 * ys.start)
+                assert raster.nodata == -32768
+                assert raster.read_masks(1).ravel().tolist() == masks
+                samples = raster.read(1).ravel().tolist()
+                if path == class_path:
+                    assert samples == classes
+                else:
+                    for stored, delta in zip(samples, expected, strict=True):
+                        if delta is None:
+                            assert stored == -32768
+                        else:
+                            assert abs(stored - float(delta)) < 1e-7
+
+        sample = next(i for i, mask in enumerate(masks) if mask)
+        for band, invalid in (("classes", 1.25), ("classes", 65537),
+                              ("delta", "0.5"), ("delta", float("nan")), ("delta", None)):
+            malformed = dict(actual)
+            malformed[band] = actual[band].copy()
+            malformed[band][sample] = invalid
+            source.write_text(json.dumps(malformed), encoding="utf-8")
+            destination = directory / "invalid"
+            try:
+                export(source, destination)
+            except ValueError:
+                assert not destination.exists()
+            else:
+                raise AssertionError((band, invalid))
+    print(f"PASS {len(expected)} Nanjing class and delta pixels match the reference after GDAL readback")
+
+
 def verify_sweep(paths, a, b, screen, offsets, flags):
     cuts = [Fraction(1, 5), Fraction(1, 10), Fraction(3, 20), Fraction(3, 20), Fraction(2)]
     actual = run(*paths, "--shift-sweep", ",".join(str(float(cut)) for cut in cuts), *flags)
@@ -215,6 +276,8 @@ def main():
                     print(f"  same nine-position footprint: {extra} newly unstable due to diagonals")
                 else:
                     axial_valid = valid
+    if args.geotiff:
+        verify_class_geotiff()
     if args.quick:
         return
     verify_cropped_pairs(args)
