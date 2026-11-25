@@ -29,7 +29,7 @@ fn main {
   let start = if args.length() > 2 && args[2] == "--" { 3 } else { 2 }
   if args.length() < start + 3 {
     println(
-      "Usage: moon run cmd/main -- <before.json> <after.json> <NDVI threshold | --transitions <cuts> [--margin <NDVI tolerance> [--witness | --verify-witness <file>] | --margins <list> | --critical-margin | --calibration-margin <tolerance> | --pair-budget <count> | --pair-budgets <list>]] [--direct] [--min-coverage <fraction>] [--inspect <row> <column> | --summary | --sweep [0.10,0.15,0.20] | --qa-impact | --shift-stress [--include-diagonals] | --tiles 2x2 | --regions [4|8] [--min-region-pixels <pixels>] [--land-only]]",
+      "Usage: moon run cmd/main -- <before.json> <after.json> <NDVI threshold | --shift-sweep <cuts> | --transitions <cuts> [--margin <NDVI tolerance> [--witness | --verify-witness <file>] | --margins <list> | --critical-margin | --calibration-margin <tolerance> | --pair-budget <count> | --pair-budgets <list>]] [--direct] [--min-coverage <fraction>] [--inspect <row> <column> | --summary | --sweep [0.10,0.15,0.20] | --qa-impact | --shift-stress [--include-diagonals] | --tiles 2x2 | --regions [4|8] [--min-region-pixels <pixels>] [--land-only]]",
     )
     @env.exit(2)
   }
@@ -37,7 +37,16 @@ fn main {
     let before = load_chip(args[start])
     let after = load_chip(args[start + 1])
     let transition_mode = args[start + 2] == "--transitions"
-    let threshold : Double = if transition_mode {
+    let shift_sweep_mode = args[start + 2] == "--shift-sweep"
+    let shift_cuts = if shift_sweep_mode {
+      if args.length() <= start + 3 {
+        fail("--shift-sweep requires comma-separated thresholds")
+      }
+      Some(parse_thresholds(args[start + 3]))
+    } else {
+      None
+    }
+    let threshold : Double = if transition_mode || shift_sweep_mode {
       0.15
     } else {
       @json.from_json(@json.parse(args[start + 2]))
@@ -64,7 +73,8 @@ fn main {
     let mut pair_budgets : Array[Int32]? = None
     let mut witness = false
     let mut verify_witness : String? = None
-    let mut index = start + (if transition_mode { 2 } else { 3 })
+    let mut index = start +
+      (if transition_mode { 2 } else if shift_sweep_mode { 4 } else { 3 })
     let seen : Map[String, Bool] = Map([])
     while index < args.length() {
       let flag = args[index]
@@ -202,13 +212,14 @@ fn main {
       sweep is Some(_),
       impact,
       shift_stress,
+      shift_sweep_mode,
       tiles is Some(_),
       regions is Some(_),
       transition is Some(_),
     ]
     if modes.filter(value => value).length() > 1 {
       fail(
-        "choose only one of --summary, --inspect, --sweep, --qa-impact, --shift-stress, --tiles, --regions and --transitions",
+        "choose only one of --summary, --inspect, --sweep, --qa-impact, --shift-stress, --shift-sweep, --tiles, --regions and --transitions",
       )
     }
     if region_min is Some(_) && regions is None {
@@ -272,8 +283,20 @@ fn main {
     if impact && direct {
       fail("--qa-impact compares both QA policies; do not also select --direct")
     }
-    if include_diagonals && !shift_stress {
-      fail("--include-diagonals requires --shift-stress")
+    if include_diagonals && !shift_stress && !shift_sweep_mode {
+      fail("--include-diagonals requires --shift-stress or --shift-sweep")
+    }
+    if shift_cuts is Some(cuts) {
+      let result = @audit.alignment_threshold_sweep(
+        before,
+        after,
+        cuts,
+        include_diagonals~,
+        screen_qa=!direct,
+        min_coverage=minimum,
+      )
+      println(Json(result).stringify())
+      return
     }
     if shift_stress {
       let (result, bounds) = @audit.alignment_stress_with_bounds(

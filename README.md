@@ -8,7 +8,7 @@
 在现有 MoonBit 工程中添加发布包。公开 API 见 [Mooncakes](https://mooncakes.io/docs/jayjay9191/ge-zheng-moonbit)。
 
 ```sh
-moon add jayjay9191/ge-zheng-moonbit@0.2.0
+moon add jayjay9191/ge-zheng-moonbit@0.3.0
 ```
 
 在源码仓库根目录运行以下命令，分别检查双样区结果和外部接口。Node.js 与 Python 版本见[从新检出复跑](#从新检出复跑)。
@@ -110,6 +110,24 @@ python scripts/verify_shift_stress.py --geotiff
 加入对角后分类不一致的像元。独立脚本复算三地、两种 QA 设置、两种偏移方式，
 并通过 GDAL 验证 GeoTIFF 坐标、掩膜和像元值。对角取样在每个轴上偏移 30 米，
 直线距离约 42.4 米，属于压力测试设定。
+
+### 一次扫描输出多阈值曲线
+
+```sh
+moon run cmd/main -- data/nanjing/scene-1.json data/nanjing/scene-2.json --shift-sweep 0.20,0.10,0.15,0.15 --include-diagonals
+moon bench analysis_wbtest.mbt --target js
+```
+
+`alignment_threshold_sweep` 在同一有效区内取像元跨偏移的最小变化幅度、最大变化幅度和
+正负两个方向中较弱的最大幅度。对阈值排序，把每个幅度用二分定位到分箱，再做后缀
+累计。第二期只缓存三行 NDVI 和 QA 状态，供相邻像元重用。设有 P 个像元、S 个偏移和 T 个阈值，时间复杂度为
+O(P·(S + log T) + T·log T)。输出保留请求顺序和重复阈值，并包含等于阈值的像元。
+
+三地分别用两种 QA 设置和两种偏移方式复跑，共 **60 行**曲线结果逐项与 Python 有理数
+独立复算一致。在 Windows、Ryzen 9 8940HX、Node.js 24.19.0、MoonBit 0.1.20261117 上，
+南京九种偏移、25 个阈值的单进程基准，逐阈值调用平均 57.01 ms，批量方法平均 2.75 ms。
+测量排除读文件与启动，逐次调用同时生成稳定性栅格，批量接口输出面积摘要。这组数据
+用于对照本机接口耗时。
 
 [USGS 配准说明](https://www.usgs.gov/landsat-missions/landsat-geometry)
 

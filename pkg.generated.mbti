@@ -11,6 +11,8 @@ pub fn alignment_stress(Chip, Chip, Double, screen_qa? : Bool, min_coverage? : D
 
 pub fn alignment_stress_with_bounds(Chip, Chip, Double, screen_qa? : Bool, min_coverage? : Double, include_diagonals? : Bool) -> (AlignmentStress, AlignmentChangeBounds) raise AuditError
 
+pub fn alignment_threshold_sweep(Chip, Chip, Array[Double], include_diagonals? : Bool, screen_qa? : Bool, min_coverage? : Double) -> AlignmentThresholdSweep raise AuditError
+
 pub fn change_regions(Audit, connectivity? : Int32, min_pixels? : Int32, land_only? : Bool) -> ChangeRegions raise AuditError
 
 pub fn compare(Chip, Chip, Double, screen_qa? : Bool, min_coverage? : Double, pixel_grids? : Bool) -> Audit raise AuditError
@@ -84,6 +86,29 @@ pub(all) struct AlignmentStress {
   max_change_m2 : Int64
   scenarios : Array[ShiftScenario]
   stability : Array[Int32]
+}
+
+#derive(@json.ToJson)
+pub(all) struct AlignmentThresholdRow {
+  threshold : Double
+  bounds : AlignmentChangeBounds
+}
+
+#derive(@json.ToJson)
+pub(all) struct AlignmentThresholdSweep {
+  first_scene : String
+  second_scene : String
+  epsg : Int32
+  x : Int32
+  y : Int32
+  width : Int32
+  height : Int32
+  cell : Int32
+  offsets : Int32
+  qa_screened : Bool
+  valid : Int32
+  valid_fraction : Double
+  rows : Array[AlignmentThresholdRow]
 }
 
 #derive(@json.ToJson)

@@ -551,3 +551,48 @@ test "square sampling detects diagonal-only change and excludes corner clouds" {
     },
   )
 }
+
+///|
+test "alignment threshold sweep preserves repeated cutoffs and matches individual bounds" {
+  let before : @lib.Chip = {
+    scene: "sweep-before",
+    date: "2024-09-09",
+    epsg: 32650,
+    x: 300000,
+    y: 3500000,
+    width: 3,
+    height: 3,
+    cell: 30,
+    red: Array::make(9, 20000),
+    nir: Array::make(9, 20000),
+    qa: Array::make(9, 0),
+    saturation: Array::make(9, 0),
+  }
+  let after = {
+    ..before,
+    scene: "sweep-after",
+    date: "2024-09-25",
+    nir: [35000, 20000, 20000, 20000, 20000, 20000, 20000, 20000, 8000],
+  }
+  let thresholds = [2.0, 0.15, 0.15, 0.01]
+  let sweep = @lib.alignment_threshold_sweep(
+    before,
+    after,
+    thresholds,
+    include_diagonals=true,
+  )
+  assert_eq(sweep.rows.map(row => row.threshold), thresholds)
+  assert_eq((sweep.valid, sweep.offsets), (1, 9))
+  for row in sweep.rows {
+    let (_, expected) = @lib.alignment_stress_with_bounds(
+      before,
+      after,
+      row.threshold,
+      include_diagonals=true,
+    )
+    assert_eq(Json(row.bounds), Json(expected))
+  }
+  assert_eq(sweep.rows[0].bounds.possible_change_m2, 0L)
+  assert_eq(sweep.rows[1].bounds.opposite_direction, 1)
+  assert_eq(sweep.rows[1].bounds.certain_change_m2, 0L)
+}

@@ -631,3 +631,35 @@ test "NDVI band accounting reconciles retained inflow outflow and gross exchange
   assert_eq(reversed.bands.map(band => band.gained), [17, 204, 483])
   assert_eq(reversed.bands.map(band => band.net), [-27, -296, 323])
 }
+
+///|
+test "Nanjing nine-position sweep of 25 NDVI thresholds" (b : @bench.T) {
+  let before = parse_chip(analysis_fixture("data/nanjing/scene-1.json"))
+  let after = parse_chip(analysis_fixture("data/nanjing/scene-2.json"))
+  let thresholds = Array::makei(25, i => (i + 1).to_double() / 100.0)
+  b.bench(name="repeat single threshold", fn() {
+    let bounds = thresholds.map(cut => {
+      let (_, result) = alignment_stress_with_bounds(
+        before,
+        after,
+        cut,
+        include_diagonals=true,
+      ) catch {
+        _ => abort("benchmark fixture failed")
+      }
+      result
+    })
+    b.keep(bounds)
+  })
+  b.bench(name="scan once and bin", fn() {
+    let sweep = alignment_threshold_sweep(
+      before,
+      after,
+      thresholds,
+      include_diagonals=true,
+    ) catch {
+      _ => abort("benchmark fixture failed")
+    }
+    b.keep(sweep.rows)
+  })
+}

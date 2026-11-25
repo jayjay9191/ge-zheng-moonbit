@@ -71,6 +71,56 @@ def verify_geotiff(actual, a, b, xs, ys, codes):
             assert raster.tags()["before"] == a["scene"] and raster.tags()["after"] == b["scene"]
 
 
+def verify_sweep(paths, a, b, screen, offsets, flags, expected_valid):
+    cuts = [Fraction(1, 5), Fraction(1, 10), Fraction(3, 20), Fraction(3, 20), Fraction(2)]
+    actual = run(*paths, "--shift-sweep", ",".join(str(float(cut)) for cut in cuts), *flags)
+    assert (actual["offsets"], actual["valid"]) == (len(offsets), expected_valid)
+    assert [row["threshold"] for row in actual["rows"]] == list(map(float, cuts))
+    reference_counts = {}
+    for cut, row in zip(cuts, actual["rows"], strict=True):
+        if cut not in reference_counts:
+            xs, ys, scans, _ = reference(a, b, cut, screen, offsets)
+            assert (actual["x"], actual["y"], actual["width"], actual["height"]) == (
+                a["x"] + 30 * xs.start, a["y"] - 30 * ys.start, len(xs), len(ys))
+            count = len(scans[0])
+            assert count == expected_valid
+            votes = [set(values) for values in zip(*scans, strict=True)]
+            reference_counts[cut] = (900 * sum(0 not in v for v in votes),
+                                     900 * sum(v != {0} for v in votes),
+                                     sum({-1, 1} <= v for v in votes))
+        bounds = row["bounds"]
+        assert (int(bounds["certain_change_m2"]), int(bounds["possible_change_m2"]),
+                bounds["opposite_direction"]) == reference_counts[cut], (cut, row)
+    print("  five threshold rows agree with independent Fraction classification")
+
+
+def verify_cropped_pair(args):
+    paths, (a, b) = load_pair(ROOT, ROOT / "data/nanjing/sources.json")
+    # Keep physical locations of real pixels while offsetting the chip origin
+    # in both dimensions. This exercises the rolling window's two offsets.
+    width = 119
+    height = 121
+    c0, r0 = 3, 2
+    clipped = dict(b, width=width, height=height, x=b["x"] + 30 * c0, y=b["y"] - 30 * r0)
+    for band in ("red", "nir", "qa", "saturation"):
+        src = b[band]
+        clipped[band] = [src[row * b["width"] + col]
+                         for row in range(r0, r0+height) for col in range(c0, c0+width)]
+    offsets = OFFSETS + [(dc, dr) for dc in (1, -1) for dr in (1, -1)]
+    xs, ys, scans, codes = reference(a, clipped, Fraction(3, 20), True, offsets)
+    with TemporaryDirectory() as temp:
+        path = Path(temp) / "cropped.json"
+        path.write_text(json.dumps(clipped), encoding="utf-8")
+        pair = (paths[0], path)
+        flags = ["--include-diagonals"]
+        actual = run(*pair, 0.15, "--shift-stress", *flags)
+        assert actual["stability"] == codes
+        if args.geotiff:
+            verify_geotiff(actual, a, clipped, xs, ys, codes)
+        verify_sweep(pair, a, clipped, True, offsets, flags, len(scans[0]))
+    print("PASS cropped real pair with nonzero row and column offsets")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--geotiff", action="store_true", help="also verify the exported raster through GDAL")
@@ -90,6 +140,7 @@ def main():
                     verify_geotiff(actual, a, b, xs, ys, codes)
                 valid = len(scans[0])
                 assert actual["valid"] == valid
+                verify_sweep(paths, a, b, screen, offsets, flags, valid)
                 assert actual["width"] == len(xs) and actual["height"] == len(ys)
                 assert actual["x"] == a["x"] + xs.start * 30
                 assert actual["y"] == a["y"] - ys.start * 30
@@ -120,10 +171,14 @@ def main():
                     print(f"  same nine-position footprint: {extra} newly unstable due to diagonals")
                 else:
                     axial_valid = valid
+    verify_cropped_pair(args)
     paths, _ = load_pair(ROOT, ROOT / "data/feidong/sources.json")
     assert "below minimum" in run(*paths, 0.15, "--shift-stress", "--min-coverage", 1, ok=False)
     assert "choose only one" in run(*paths, 0.15, "--shift-stress", "--summary", ok=False)
     assert "requires --shift-stress" in run(*paths, 0.15, "--include-diagonals", ok=False)
+    assert "requires comma-separated thresholds" in run(*paths, "--shift-sweep", ok=False)
+    assert "NDVI threshold" in run(*paths, "--shift-sweep", "0.1,0", ok=False)
+    assert "choose only one" in run(*paths, "--shift-sweep", "0.1", "--summary", ok=False)
 
 
 if __name__ == "__main__":

@@ -109,17 +109,7 @@ fn count_thresholds(
       valid += 1
       let delta = b - a
       let magnitude = if delta < 0.0 { -delta } else { delta }
-      // Find the number of thresholds met, including equal boundaries and ties.
-      let mut lo = 0
-      let mut hi = size
-      while lo < hi {
-        let mid = lo + (hi - lo) / 2
-        if thresholds[ordered[mid]] <= magnitude {
-          lo = mid + 1
-        } else {
-          hi = mid
-        }
-      }
+      let lo = thresholds_met(thresholds, ordered, magnitude)
       if lo > 0 {
         if delta > 0.0 {
           gain_bins[lo] += 1
@@ -129,18 +119,8 @@ fn count_thresholds(
       }
     }
   }
-  // Accumulate bins from the largest threshold down, then restore request order.
-  let gains = Array::make(size, 0)
-  let losses = Array::make(size, 0)
-  let mut gain = 0
-  let mut loss = 0
-  for offset in 0..<size {
-    let i = size - offset - 1
-    gain += gain_bins[i + 1]
-    loss += loss_bins[i + 1]
-    gains[ordered[i]] = gain
-    losses[ordered[i]] = loss
-  }
+  let gains = accumulate_threshold_bins(ordered, gain_bins)
+  let losses = accumulate_threshold_bins(ordered, loss_bins)
   let overlap = (row1 - row0) * (col1 - col0)
   Array::makei(size, i => {
     let gain = gains[i]
@@ -156,4 +136,40 @@ fn count_thresholds(
       },
     }
   })
+}
+
+///|
+fn thresholds_met(
+  thresholds : Array[Double],
+  ordered : Array[Int32],
+  magnitude : Double,
+) -> Int32 {
+  let mut lo = 0
+  let mut hi = ordered.length()
+  while lo < hi {
+    let mid = lo + (hi - lo) / 2
+    if thresholds[ordered[mid]] <= magnitude {
+      lo = mid + 1
+    } else {
+      hi = mid
+    }
+  }
+  lo
+}
+
+///|
+// Sum the bins above each threshold and restore request order, including ties.
+fn accumulate_threshold_bins(
+  ordered : Array[Int32],
+  bins : Array[Int32],
+) -> Array[Int32] {
+  let size = ordered.length()
+  let result = Array::make(size, 0)
+  let mut count = 0
+  for offset in 0..<size {
+    let i = size - offset - 1
+    count += bins[i + 1]
+    result[ordered[i]] = count
+  }
+  result
 }
