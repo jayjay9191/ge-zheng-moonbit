@@ -18,7 +18,7 @@ python scripts/verify_shift_stress.py --quick
 这个范围描述指定错位情景的敏感性。
 
 v0.3.0 本期新增对角偏移、面积上下界及一次扫描的多阈值曲线。
-去掉 `--quick` 可核对三地全量，按需安装 Rasterio 后加 `--geotiff` 回读栅格。
+去掉 `--quick` 可核对三地真实裁片，再用独立有理数实现复算 48 对固定种子的合成栅格，每对检查 5 个阈值，覆盖双向错位、云雪和饱和掩膜。安装 Rasterio 后加 `--geotiff` 回读栅格。
 [发布记录](https://github.com/jayjay9191/ge-zheng-moonbit/releases/tag/v0.3.0) · [栅格验证](https://github.com/jayjay9191/ge-zheng-moonbit/actions/workflows/verify.yml) · [裁片来源](data/nanjing/sources.json) · [许可证](LICENSE)
 
 ## 安装与复跑

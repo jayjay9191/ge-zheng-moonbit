@@ -3,12 +3,14 @@ import argparse
 from fractions import Fraction
 import json
 from pathlib import Path
+from random import Random
 import subprocess
 from tempfile import TemporaryDirectory
 from source_manifest import load_pair
 
 ROOT = Path(__file__).resolve().parents[1]
 OFFSETS = [(0, 0), (1, 0), (-1, 0), (0, 1), (0, -1)]
+DIAGONALS = [(dc, dr) for dc in (1, -1) for dr in (1, -1)]
 
 
 def ndvi(chip, index, screen):
@@ -71,10 +73,11 @@ def verify_geotiff(actual, a, b, xs, ys, codes):
             assert raster.tags()["before"] == a["scene"] and raster.tags()["after"] == b["scene"]
 
 
-def verify_sweep(paths, a, b, screen, offsets, flags, expected_valid):
+def verify_sweep(paths, a, b, screen, offsets, flags):
     cuts = [Fraction(1, 5), Fraction(1, 10), Fraction(3, 20), Fraction(3, 20), Fraction(2)]
     actual = run(*paths, "--shift-sweep", ",".join(str(float(cut)) for cut in cuts), *flags)
-    assert (actual["offsets"], actual["valid"]) == (len(offsets), expected_valid)
+    assert actual["offsets"] == len(offsets)
+    assert actual["qa_screened"] == screen
     assert [row["threshold"] for row in actual["rows"]] == list(map(float, cuts))
     reference_counts = {}
     for cut, row in zip(cuts, actual["rows"], strict=True):
@@ -83,7 +86,8 @@ def verify_sweep(paths, a, b, screen, offsets, flags, expected_valid):
             assert (actual["x"], actual["y"], actual["width"], actual["height"]) == (
                 a["x"] + 30 * xs.start, a["y"] - 30 * ys.start, len(xs), len(ys))
             count = len(scans[0])
-            assert count == expected_valid
+            assert actual["valid"] == count
+            assert actual["valid_fraction"] == count / (len(xs) * len(ys))
             votes = [set(values) for values in zip(*scans, strict=True)]
             reference_counts[cut] = (900 * sum(0 not in v for v in votes),
                                      900 * sum(v != {0} for v in votes),
@@ -91,14 +95,13 @@ def verify_sweep(paths, a, b, screen, offsets, flags, expected_valid):
         bounds = row["bounds"]
         assert (int(bounds["certain_change_m2"]), int(bounds["possible_change_m2"]),
                 bounds["opposite_direction"]) == reference_counts[cut], (cut, row)
-    print("  five threshold rows agree with independent Fraction classification")
 
 
 def verify_cropped_pairs(args):
     paths, chips = load_pair(ROOT, ROOT / "data/nanjing/sources.json")
     # Crop one date at a time to verify nonzero offsets in both directions.
     width, height, c0, r0 = 119, 121, 3, 2
-    offsets = OFFSETS + [(dc, dr) for dc in (1, -1) for dr in (1, -1)]
+    offsets = OFFSETS + DIAGONALS
     with TemporaryDirectory() as temp:
         for cropped in (0, 1):
             chip = chips[cropped]
@@ -110,7 +113,7 @@ def verify_cropped_pairs(args):
                                  for row in range(r0, r0 + height)
                                  for col in range(c0, c0 + width)]
             a, b = (clipped, chips[1]) if cropped == 0 else (chips[0], clipped)
-            xs, ys, scans, codes = reference(a, b, Fraction(3, 20), True, offsets)
+            xs, ys, _, codes = reference(a, b, Fraction(3, 20), True, offsets)
             path = Path(temp) / f"cropped-{cropped}.json"
             path.write_text(json.dumps(clipped), encoding="utf-8")
             pair = (path, paths[1]) if cropped == 0 else (paths[0], path)
@@ -119,8 +122,40 @@ def verify_cropped_pairs(args):
             assert actual["stability"] == codes
             if args.geotiff:
                 verify_geotiff(actual, a, b, xs, ys, codes)
-            verify_sweep(pair, a, b, True, offsets, flags, len(scans[0]))
+            verify_sweep(pair, a, b, True, offsets, flags)
     print("PASS cropped real pairs with both signs of row and column offsets")
+
+
+def verify_synthetic_pairs():
+    rng = Random(20261125)
+
+    def chip(scene, day, x, y):
+        width, height = rng.randrange(8, 13), rng.randrange(8, 13)
+        cells = width * height
+        return dict(scene=scene, date=day, epsg=32650, x=x, y=y, cell=30,
+                    width=width, height=height,
+                    red=[rng.randrange(10000, 28000) for _ in range(cells)],
+                    nir=[rng.randrange(10000, 36000) for _ in range(cells)],
+                    qa=[rng.choice((1, 2, 4, 8, 16, 32, 64, 128)) if rng.randrange(15) == 0 else 0
+                        for _ in range(cells)],
+                    saturation=[rng.choice((1, 8, 16, 2048)) if rng.randrange(25) == 0 else 0
+                                for _ in range(cells)])
+
+    with TemporaryDirectory() as temp:
+        paths = [Path(temp) / name for name in ("before.json", "after.json")]
+        for case in range(48):
+            a = chip("synthetic-before", "2024-09-09", 300000, 3500000)
+            b = chip("synthetic-after", "2024-09-25", a["x"] + rng.randrange(-2, 3) * 30,
+                     a["y"] + rng.randrange(-2, 3) * 30)
+            for path, data in zip(paths, (a, b), strict=True):
+                path.write_text(json.dumps(data), encoding="utf-8")
+            screen = case % 3 != 0
+            offsets = OFFSETS + DIAGONALS if case % 2 else OFFSETS
+            flags = [] if screen else ["--direct"]
+            if case % 2:
+                flags.append("--include-diagonals")
+            verify_sweep(paths, a, b, screen, offsets, flags)
+    print("PASS 48 seeded synthetic pairs x 5 thresholds against independent Fraction bounds")
 
 
 def main():
@@ -137,7 +172,7 @@ def main():
             for diagonals in (False, True):
                 if args.quick and not (screen and diagonals):
                     continue
-                offsets = OFFSETS + [(dc, dr) for dc in (1, -1) for dr in (1, -1)] if diagonals else OFFSETS
+                offsets = OFFSETS + DIAGONALS if diagonals else OFFSETS
                 xs, ys, scans, codes = reference(a, b, Fraction(3, 20), screen, offsets)
                 flags = [] if screen else ["--direct"]
                 if diagonals:
@@ -148,7 +183,7 @@ def main():
                     verify_geotiff(actual, a, b, xs, ys, codes)
                 valid = len(scans[0])
                 assert actual["valid"] == valid
-                verify_sweep(paths, a, b, screen, offsets, flags, valid)
+                verify_sweep(paths, a, b, screen, offsets, flags)
                 assert actual["width"] == len(xs) and actual["height"] == len(ys)
                 assert actual["x"] == a["x"] + xs.start * 30
                 assert actual["y"] == a["y"] - ys.start * 30
@@ -183,6 +218,7 @@ def main():
     if args.quick:
         return
     verify_cropped_pairs(args)
+    verify_synthetic_pairs()
     paths, _ = load_pair(ROOT, ROOT / "data/feidong/sources.json")
     assert "below minimum" in run(*paths, 0.15, "--shift-stress", "--min-coverage", 1, ok=False)
     assert "choose only one" in run(*paths, 0.15, "--shift-stress", "--summary", ok=False)
