@@ -125,12 +125,18 @@ def verify_cropped_pairs(args):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--quick", action="store_true", help="verify the Nanjing nine-position QA case")
     parser.add_argument("--geotiff", action="store_true", help="also verify the exported raster through GDAL")
     args = parser.parse_args()
-    for folder in ("data", "data/feidong", "data/nanjing"):
+    if not __debug__:
+        parser.error("enable Python assertions (remove -O or PYTHONOPTIMIZE)")
+    folders = ("data/nanjing",) if args.quick else ("data", "data/feidong", "data/nanjing")
+    for folder in folders:
         paths, (a, b) = load_pair(ROOT, ROOT / folder / "sources.json")
         for screen in (True, False):
             for diagonals in (False, True):
+                if args.quick and not (screen and diagonals):
+                    continue
                 offsets = OFFSETS + [(dc, dr) for dc in (1, -1) for dr in (1, -1)] if diagonals else OFFSETS
                 xs, ys, scans, codes = reference(a, b, Fraction(3, 20), screen, offsets)
                 flags = [] if screen else ["--direct"]
@@ -167,12 +173,15 @@ def main():
                 print(f"{folder} QA={screen} offsets={len(offsets)}: {valid} valid, "
                       f"{codes.count(2)} unstable, pixelwise bounds {lower}..{upper} m^2, {flips} sign flips")
                 if diagonals:
-                    assert valid <= axial_valid
+                    if not args.quick:
+                        assert valid <= axial_valid
                     extra = sum(len(set(row[:5])) == 1 and len(set(row)) > 1
                                 for row in zip(*scans, strict=True))
                     print(f"  same nine-position footprint: {extra} newly unstable due to diagonals")
                 else:
                     axial_valid = valid
+    if args.quick:
+        return
     verify_cropped_pairs(args)
     paths, _ = load_pair(ROOT, ROOT / "data/feidong/sources.json")
     assert "below minimum" in run(*paths, 0.15, "--shift-stress", "--min-coverage", 1, ok=False)

@@ -3,6 +3,24 @@
 
 在计算植被指数变化前，先检查两期栅格是否落在同一网格，再剔除云、阴影、雪、饱和和无数据像元。输出共同有效率、阈值上下的变化面积、逐像元差值以及排除原因。首版面向北向、30 米、同一 WGS84 UTM 分区的 Landsat 8/9 Collection 2 Level-2 裁片。
 
+## 十一月验收复跑
+
+从源码仓库根目录运行，使用 MoonBit CLI、Node.js 24 和 Python 3.10+。
+
+```sh
+python scripts/verify_shift_stress.py --quick
+```
+
+命令核对南京两期 Landsat 裁片的 SHA-256，在启用 QA 的九种取样位置上，
+用 Python 有理数逐像元对照 MoonBit。阈值 0.15 时，共同有效 **10,160** 个像元，
+**2,329** 个像元出现变化方向反转，变化面积上下界为 **1.0485–7.7409 km²**。
+同一个共同有效区还会核对多阈值结果和重复阈值。
+这个范围描述指定错位情景的敏感性。
+
+v0.3.0 本期新增对角偏移、面积上下界及一次扫描的多阈值曲线。
+去掉 `--quick` 可核对三地全量，按需安装 Rasterio 后加 `--geotiff` 回读栅格。
+[发布记录](https://github.com/jayjay9191/ge-zheng-moonbit/releases/tag/v0.3.0) · [栅格验证](https://github.com/jayjay9191/ge-zheng-moonbit/actions/workflows/verify.yml) · [裁片来源](data/nanjing/sources.json) · [许可证](LICENSE)
+
 ## 安装与复跑
 
 在现有 MoonBit 工程中添加发布包。公开 API 见 [Mooncakes](https://mooncakes.io/docs/jayjay9191/ge-zheng-moonbit)。
@@ -134,7 +152,7 @@ O(P·(S + log T) + T·log T)。输出保留请求顺序和重复阈值，并包�
 
 ## 初审核对
 
-在仓库根目录运行 `moon test review`。十四个 [公开接口案例](review/public_contract_test.mbt) 覆盖 QA 与陆地筛选、拒绝不守恒的矩阵、多档迁移和阈值容差。真实裁片可用下面的命令复跑。
+在仓库根目录运行 `moon test review`。[公开接口案例](review/public_contract_test.mbt) 覆盖 QA 与陆地筛选、拒绝不守恒的矩阵、多档迁移和阈值容差。真实裁片可用下面的命令复跑。
 
 运行 `python scripts/verify_analysis.py`。库源码排除 CLI、生成数据、测试、空行和注释后共 **1,878 行**，再排除纯标点行仍有 **1,558 行**。脚本逐文件报告计数并检查 500 行门槛。
 
