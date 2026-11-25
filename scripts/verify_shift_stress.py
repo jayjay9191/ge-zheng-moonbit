@@ -94,31 +94,33 @@ def verify_sweep(paths, a, b, screen, offsets, flags, expected_valid):
     print("  five threshold rows agree with independent Fraction classification")
 
 
-def verify_cropped_pair(args):
-    paths, (a, b) = load_pair(ROOT, ROOT / "data/nanjing/sources.json")
-    # Keep physical locations of real pixels while offsetting the chip origin
-    # in both dimensions. This exercises the rolling window's two offsets.
-    width = 119
-    height = 121
-    c0, r0 = 3, 2
-    clipped = dict(b, width=width, height=height, x=b["x"] + 30 * c0, y=b["y"] - 30 * r0)
-    for band in ("red", "nir", "qa", "saturation"):
-        src = b[band]
-        clipped[band] = [src[row * b["width"] + col]
-                         for row in range(r0, r0+height) for col in range(c0, c0+width)]
+def verify_cropped_pairs(args):
+    paths, chips = load_pair(ROOT, ROOT / "data/nanjing/sources.json")
+    # Crop one date at a time to verify nonzero offsets in both directions.
+    width, height, c0, r0 = 119, 121, 3, 2
     offsets = OFFSETS + [(dc, dr) for dc in (1, -1) for dr in (1, -1)]
-    xs, ys, scans, codes = reference(a, clipped, Fraction(3, 20), True, offsets)
     with TemporaryDirectory() as temp:
-        path = Path(temp) / "cropped.json"
-        path.write_text(json.dumps(clipped), encoding="utf-8")
-        pair = (paths[0], path)
-        flags = ["--include-diagonals"]
-        actual = run(*pair, 0.15, "--shift-stress", *flags)
-        assert actual["stability"] == codes
-        if args.geotiff:
-            verify_geotiff(actual, a, clipped, xs, ys, codes)
-        verify_sweep(pair, a, clipped, True, offsets, flags, len(scans[0]))
-    print("PASS cropped real pair with nonzero row and column offsets")
+        for cropped in (0, 1):
+            chip = chips[cropped]
+            clipped = dict(chip, width=width, height=height,
+                           x=chip["x"] + 30 * c0, y=chip["y"] - 30 * r0)
+            for band in ("red", "nir", "qa", "saturation"):
+                src = chip[band]
+                clipped[band] = [src[row * chip["width"] + col]
+                                 for row in range(r0, r0 + height)
+                                 for col in range(c0, c0 + width)]
+            a, b = (clipped, chips[1]) if cropped == 0 else (chips[0], clipped)
+            xs, ys, scans, codes = reference(a, b, Fraction(3, 20), True, offsets)
+            path = Path(temp) / f"cropped-{cropped}.json"
+            path.write_text(json.dumps(clipped), encoding="utf-8")
+            pair = (path, paths[1]) if cropped == 0 else (paths[0], path)
+            flags = ["--include-diagonals"]
+            actual = run(*pair, 0.15, "--shift-stress", *flags)
+            assert actual["stability"] == codes
+            if args.geotiff:
+                verify_geotiff(actual, a, b, xs, ys, codes)
+            verify_sweep(pair, a, b, True, offsets, flags, len(scans[0]))
+    print("PASS cropped real pairs with both signs of row and column offsets")
 
 
 def main():
@@ -171,7 +173,7 @@ def main():
                     print(f"  same nine-position footprint: {extra} newly unstable due to diagonals")
                 else:
                     axial_valid = valid
-    verify_cropped_pair(args)
+    verify_cropped_pairs(args)
     paths, _ = load_pair(ROOT, ROOT / "data/feidong/sources.json")
     assert "below minimum" in run(*paths, 0.15, "--shift-stress", "--min-coverage", 1, ok=False)
     assert "choose only one" in run(*paths, 0.15, "--shift-stress", "--summary", ok=False)
