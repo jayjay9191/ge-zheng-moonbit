@@ -349,10 +349,21 @@ test "source inspection matches full grids with offsets and QA masking" {
   }
   let bad = Ok(inspect_sources(a, b, 0.15, 1, 3)) catch { e => Err(e) }
   assert_true(bad is Err(Invalid(_)))
-  let uncovered = Ok(inspect_sources(a, b, 0.15, 1, 2, min_coverage=0.6)) catch {
+  let masked = inspect_sources(a, b, 0.15, 1, 1, min_coverage=0.5)
+  assert_true(masked.delta is None)
+  let uncovered = Ok(
+    inspect_sources(a, b, 0.15, 1, 2, min_coverage=0.5000000000000001),
+  ) catch {
     e => Err(e)
   }
-  assert_true(uncovered is Err(Invalid(_)))
+  assert_true(uncovered is Err(Invalid(reason)) && reason.contains("1/2"))
+  let cloudy = { ..b, qa: [8, 8, 8], }
+  let empty = Ok(inspect_sources(a, cloudy, 0.15, 1, 1)) catch { e => Err(e) }
+  assert_true(empty is Err(Invalid(reason)) && reason.contains("no pixels"))
+  assert_true(
+    inspect_sources(a, cloudy, 0.15, 1, 1, screen_qa=false, min_coverage=1.0).delta
+    is Some(_),
+  )
 }
 
 ///|

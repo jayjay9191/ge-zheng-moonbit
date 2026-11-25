@@ -533,14 +533,28 @@ pub fn inspect_sources(
     a, b, window, threshold, row, column, screen_qa,
   )
   if min_coverage > 0.0 || evidence.delta is None {
-    let counts = count_thresholds(a, b, window, [threshold], screen_qa)[0].counts
-    ignore(
-      shared_coverage(
-        counts.valid,
-        counts.valid + counts.excluded,
-        min_coverage,
-      ),
-    )
+    let { dx, dy, col0, row0, col1, row1, } = window
+    let overlap = (col1 - col0) * (row1 - row0)
+    let mut valid = 0
+    for grid_row in row0..<row1 {
+      for grid_col in col0..<col1 {
+        let ia = grid_row * a.width + grid_col
+        let (reason_a, _, _) = pixel(a, ia, screen_qa)
+        if reason_a != 0 {
+          continue
+        }
+        let ib = (grid_row - dy) * b.width + grid_col - dx
+        let (reason_b, _, _) = pixel(b, ib, screen_qa)
+        if reason_b == 0 {
+          valid += 1
+        }
+      }
+      // Coverage is a lower bound. A passing prefix proves the result.
+      if valid > 0 && valid.to_double() / overlap.to_double() >= min_coverage {
+        return evidence
+      }
+    }
+    ignore(shared_coverage(valid, overlap, min_coverage))
   }
   evidence
 }
