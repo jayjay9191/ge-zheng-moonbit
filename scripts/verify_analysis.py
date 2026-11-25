@@ -497,11 +497,26 @@ def main():
                                 assert abs(actual["margin"] - float(expected[0])) < 1e-12
                                 assert actual["attained"] == expected[1]
                             print(f"PASS pair budget {cap}: {actual}")
-                            if cap == 162:
-                                below, above = (run_pair(paths, "0.5", "--margin", str(actual["margin"] + offset),
-                                                         threshold="--transitions")["neutralization"]["minimum_changed_pairs"]
-                                                for offset in (-1e-9, 1e-9))
-                                assert (below is None or below > cap) and above == cap
+                            if actual is not None:
+                                exact = actual["margin"]
+                                adjacent = nextafter(exact, 0.0), exact, nextafter(exact, inf)
+                                eligible = []
+                                for radius in adjacent:
+                                    result = run_pair(paths, "0.5", "--margin", repr(radius), threshold="--transitions")
+                                    minimum = result["neutralization"].get("minimum_changed_pairs")
+                                    eligible.append(minimum is not None and minimum <= cap)
+                                assert eligible == [False, actual["attained"], True], (cap, adjacent, eligible)
+                                if cap == 276:
+                                    witness = run_pair(paths, "0.5", "--margin", repr(exact), "--witness",
+                                                       threshold="--transitions")["witness"]
+                                    assert len(witness) == 276
+                                    with TemporaryDirectory(prefix="boundary-witness-") as folder_path:
+                                        proof = Path(folder_path) / "witness.json"
+                                        proof.write_text(json.dumps(witness), encoding="utf-8")
+                                        verified = run_pair(paths, "0.5", "--margin", repr(exact), "--verify-witness",
+                                                            str(proof), threshold="--transitions")
+                                        assert verified["audit"] == dict(observed_net=nominal, final_net=0, changed_pairs=cap)
+                                    print(f"PASS {len(witness)} real pairs replay at the exact attained budget margin")
                         order = (323, 161, 276, 162, 162, 0, 323)
                         batch = run_pair(paths, "0.5", "--pair-budgets", ",".join(map(str, order)),
                                          threshold="--transitions")["budgets"]

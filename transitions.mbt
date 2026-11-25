@@ -285,6 +285,53 @@ pub(all) struct NdviThresholdBounds {
 pub extend NdviThresholdBounds with @json.ToJson::{to_json}
 
 ///|
+fn validate_ndvi_margin(
+  threshold : Double,
+  margin : Double,
+) -> Unit raise AuditError {
+  if !(margin >= 0.0 && threshold - margin > -1.0 && threshold + margin < 1.0) {
+    raise Invalid(
+      "NDVI margin must be nonnegative, with both endpoints inside (-1, 1)",
+    )
+  }
+}
+
+///|
+// Use the same rounded distance as the critical-margin and pair-budget sweeps.
+// Moving from the upper band to the lower band requires strictly more than it.
+fn can_flip_at_margin(
+  value : Double,
+  threshold : Double,
+  margin : Double,
+) -> Bool {
+  if value < threshold {
+    threshold - value <= margin
+  } else {
+    value - threshold < margin
+  }
+}
+
+///|
+fn uncertainty_band(
+  value : Double,
+  threshold : Double,
+  margin : Double,
+) -> Int32 {
+  let can_flip = can_flip_at_margin(value, threshold, margin)
+  if value < threshold {
+    if can_flip {
+      1
+    } else {
+      0
+    }
+  } else if can_flip {
+    2
+  } else {
+    3
+  }
+}
+
+///|
 /// Count guaranteed, observed, and possible crossings under independent bounded
 /// perturbations of each measured NDVI. Equality belongs to the upper side.
 pub fn ndvi_threshold_bounds(
@@ -296,33 +343,32 @@ pub fn ndvi_threshold_bounds(
   min_coverage~ : Double = 0.0,
   land_only~ : Bool = false,
 ) -> NdviThresholdBounds raise AuditError {
-  let lower = threshold - margin
-  let upper = threshold + margin
-  if !(margin >= 0.0 && lower > -1.0 && upper < 1.0) {
-    raise Invalid(
-      "NDVI margin must be nonnegative, with both endpoints inside (-1, 1)",
-    )
-  }
-  let cuts = if margin == 0.0 { [threshold] } else { [lower, threshold, upper] }
-  let matrix = ndvi_transitions(
+  validate_ndvi_cut_points([threshold])
+  validate_ndvi_margin(threshold, margin)
+  let counts = Array::makei(4, _ => Array::make(4, 0))
+  let (overlap, valid, water_excluded, valid_fraction) = visit_ndvi_pairs(
     before,
     after,
-    cuts,
-    screen_qa~,
-    min_coverage~,
-    land_only~,
+    screen_qa,
+    land_only,
+    min_coverage,
+    (_, _, a, b) => {
+      let i = uncertainty_band(a, threshold, margin)
+      let j = uncertainty_band(b, threshold, margin)
+      counts[i][j] += 1
+    },
   )
-  let nominal = cuts.length() / 2
-  let last_band = cuts.length()
+  let nominal = 1
+  let last_band = 3
   let mut observed_up = 0
   let mut observed_down = 0
   let mut possible_up = 0
   let mut possible_down = 0
   let mut double_increase = 0
   let mut double_decrease = 0
-  for i in 0..<matrix.counts.length() {
-    for j in 0..<matrix.counts.length() {
-      let count = matrix.counts[i][j]
+  for i in 0..<counts.length() {
+    for j in 0..<counts.length() {
+      let count = counts[i][j]
       if i <= nominal && j > nominal {
         observed_up += count
       } else if i > nominal && j <= nominal {
@@ -342,8 +388,8 @@ pub fn ndvi_threshold_bounds(
       }
     }
   }
-  let guaranteed_up = matrix.counts[0][last_band]
-  let guaranteed_down = matrix.counts[last_band][0]
+  let guaranteed_up = counts[0][last_band]
+  let guaranteed_down = counts[last_band][0]
   let net : NdviNetBounds = {
     minimum: guaranteed_up - possible_down,
     observed: observed_up - observed_down,
@@ -384,12 +430,12 @@ pub fn ndvi_threshold_bounds(
       double_step_pairs,
       minimum_changed_pairs,
     },
-    valid: matrix.valid,
-    excluded: matrix.excluded,
-    water_excluded: matrix.water_excluded,
-    qa_screened: matrix.qa_screened,
-    land_only: matrix.land_only,
-    valid_fraction: matrix.valid_fraction,
+    valid,
+    excluded: overlap - valid,
+    water_excluded,
+    qa_screened: screen_qa,
+    land_only,
+    valid_fraction,
   }
 }
 
@@ -418,8 +464,27 @@ pub(all) struct NdviMarginSweep {
 pub extend NdviMarginSweep with @json.ToJson::{to_json}
 
 ///|
-/// Build one matrix for the cut and all tolerance endpoints, then reuse its marginal
-/// counts. The reported first inconclusive margin is taken from the requested grid.
+fn first_flip_margin(
+  value : Double,
+  threshold : Double,
+  margins : Array[Double],
+) -> Int32 {
+  let mut low = 0
+  let mut high = margins.length()
+  while low < high {
+    let middle = low + (high - low) / 2
+    if can_flip_at_margin(value, threshold, margins[middle]) {
+      high = middle
+    } else {
+      low = middle + 1
+    }
+  }
+  low
+}
+
+///|
+/// Bin each flip at its first reachable tolerance in one scan.
+/// The reported first inconclusive margin is taken from the requested grid.
 pub fn ndvi_margin_sweep(
   before : Chip,
   after : Chip,
@@ -432,57 +497,50 @@ pub fn ndvi_margin_sweep(
   if margins.is_empty() || margins.length() > 7 {
     raise Invalid("NDVI margin sweep requires 1 to 7 margins")
   }
+  validate_ndvi_cut_points([threshold])
   let mut previous = -1.0
-  let lower_cuts : Array[Double] = []
-  let upper_cuts : Array[Double] = []
   for margin in margins {
     if !(margin >= 0.0 && margin > previous) {
       raise Invalid(
         "NDVI sweep margins must strictly increase from zero or greater",
       )
     }
-    if margin > 0.0 {
-      lower_cuts.push(threshold - margin)
-      upper_cuts.push(threshold + margin)
-    }
+    validate_ndvi_margin(threshold, margin)
     previous = margin
   }
-  let center = lower_cuts.length()
-  let cuts = lower_cuts.rev() + [threshold] + upper_cuts
-  let matrix = ndvi_transitions(
+  // The last bin records flips beyond the largest requested margin.
+  let increases = Array::make(margins.length() + 1, 0)
+  let decreases = Array::make(margins.length() + 1, 0)
+  let mut observed = 0
+  let (overlap, valid, water_excluded, valid_fraction) = visit_ndvi_pairs(
     before,
     after,
-    cuts,
-    screen_qa~,
-    min_coverage~,
-    land_only~,
+    screen_qa,
+    land_only,
+    min_coverage,
+    (_, _, a, b) => {
+      let i = first_flip_margin(a, threshold, margins)
+      let j = first_flip_margin(b, threshold, margins)
+      if a >= threshold {
+        observed -= 1
+        increases[i] += 1
+      } else {
+        decreases[i] += 1
+      }
+      if b >= threshold {
+        observed += 1
+        decreases[j] += 1
+      } else {
+        increases[j] += 1
+      }
+    },
   )
-  let summary = summarize_ndvi_transitions(matrix)
-  let before_above = Array::make(cuts.length(), 0)
-  let after_above = Array::make(cuts.length(), 0)
-  let mut before_count = 0
-  let mut after_count = 0
-  for offset in 0..<cuts.length() {
-    let i = cuts.length() - 1 - offset
-    before_count += summary.before_counts[i + 1]
-    after_count += summary.after_counts[i + 1]
-    before_above[i] = before_count
-    after_above[i] = after_count
-  }
-  let mut offset = 0
-  let observed = after_above[center] - before_above[center]
-  let rows : Array[NdviMarginRow] = margins.map(margin => {
-    if margin > 0.0 {
-      offset += 1
-    }
-    {
-      margin,
-      net: {
-        minimum: after_above[center + offset] - before_above[center - offset],
-        observed,
-        maximum: after_above[center - offset] - before_above[center + offset],
-      },
-    }
+  let mut minimum = observed
+  let mut maximum = observed
+  let rows : Array[NdviMarginRow] = Array::makei(margins.length(), i => {
+    minimum -= decreases[i]
+    maximum += increases[i]
+    { margin: margins[i], net: { minimum, observed, maximum, }, }
   })
   {
     threshold,
@@ -491,12 +549,12 @@ pub fn ndvi_margin_sweep(
     .iter()
     .find_first(row => row.net.minimum <= 0 && row.net.maximum >= 0)
     .map(row => row.margin),
-    valid: matrix.valid,
-    excluded: matrix.excluded,
-    water_excluded: matrix.water_excluded,
-    qa_screened: matrix.qa_screened,
-    land_only: matrix.land_only,
-    valid_fraction: matrix.valid_fraction,
+    valid,
+    excluded: overlap - valid,
+    water_excluded,
+    qa_screened: screen_qa,
+    land_only,
+    valid_fraction,
   }
 }
 
@@ -640,8 +698,6 @@ pub fn ndvi_neutralization_witness(
   let singles = pair_count - doubles
   let spare_double = bounds.neutralization.double_step_pairs > doubles &&
     singles == 1
-  let lower = threshold - margin
-  let upper = threshold + margin
   let double_changes : Array[NdviPairWitness] = []
   let single_changes : Array[NdviPairWitness] = []
   // ponytail: replay the pair iterator once, retaining only emitted cells.
@@ -652,16 +708,10 @@ pub fn ndvi_neutralization_witness(
       a,
       b,
     ) => {
-      let a_can_flip = if increase {
-        a >= threshold && a < upper
-      } else {
-        a < threshold && a >= lower
-      }
-      let b_can_flip = if increase {
-        b < threshold && b >= lower
-      } else {
-        b >= threshold && b < upper
-      }
+      let a_can_flip = (a >= threshold) == increase &&
+        can_flip_at_margin(a, threshold, margin)
+      let b_can_flip = (b < threshold) == increase &&
+        can_flip_at_margin(b, threshold, margin)
       match (a_can_flip, b_can_flip) {
         (true, true) =>
           if double_changes.length() < doubles {
@@ -734,9 +784,7 @@ pub fn verify_ndvi_witness(
   }
   let seen = Array::make(witness.length(), false)
   let deltas : Array[Int32?] = Array::make(witness.length(), None)
-  let lower = threshold - margin
-  let upper = threshold + margin
-  // A selected date can flip iff the half-open uncertainty band contains its measurement.
+  // Validate the witness with the same inclusive/strict flip distances as the solver.
   if !witness.is_empty() {
     ignore(
       visit_ndvi_pairs(before, after, screen_qa, land_only, min_coverage, (
@@ -752,8 +800,8 @@ pub fn verify_ndvi_witness(
             AfterDate => (false, true)
             BothDates => (true, true)
           }
-          if (!flip_a || (a >= lower && a < upper)) &&
-            (!flip_b || (b >= lower && b < upper)) {
+          if (!flip_a || can_flip_at_margin(a, threshold, margin)) &&
+            (!flip_b || can_flip_at_margin(b, threshold, margin)) {
             let delta_a = if !flip_a {
               0
             } else if a >= threshold {

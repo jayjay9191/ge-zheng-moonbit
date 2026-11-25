@@ -654,3 +654,72 @@ test "decimal NDVI changes at the inclusive cutoff survive scaled reflectance" {
   let transitions = @lib.ndvi_transitions(first, second, [0.11, 0.33])
   assert_eq(transitions.counts, [[0, 0, 0], [0, 0, 9], [0, 0, 0]])
 }
+
+///|
+test "reported critical margins agree with bounds and witness replay at adjacent Doubles" {
+  let (a, b) = review_threshold_pair()
+  // With DN sum 17000, each step of 270 in band difference is NDVI 0.11.
+  let chip = (base : @lib.Chip, step : Int32) => {
+    ..base,
+    width: 1,
+    red: [8500 - 135 * step],
+    nir: [8500 + 135 * step],
+    qa: [0],
+    saturation: [0],
+  }
+  for
+    (before_step, after_step, threshold, critical, attained, margins, feasible) in [
+      (
+        -1,
+        8,
+        0.33,
+        0.44,
+        true,
+        [0.43999999999999995, 0.44, 0.44000000000000006],
+        [false, true, true],
+      ),
+      (
+        -6,
+        1,
+        -0.22,
+        0.33,
+        false,
+        [0.32999999999999996, 0.33, 0.33000000000000007],
+        [false, false, true],
+      ),
+      (1, 3, 0.33, 0.0, false, [0.0, 1.0e-18], [false, true]),
+    ] {
+    let first = chip(a, before_step)
+    let second = chip(b, after_step)
+    for (before, after) in [(first, second), (second, first)] {
+      let boundary = @lib.ndvi_critical_margin(before, after, threshold)
+      assert_eq(
+        (boundary.margin_infimum, boundary.zero_possible_at_infimum),
+        (critical, attained),
+      )
+      let budget = @lib.ndvi_budget_margin(before, after, threshold, 1).critical.unwrap()
+      assert_eq((budget.margin, budget.attained), (critical, attained))
+      let sweep = @lib.ndvi_margin_sweep(before, after, threshold, margins)
+      for i, margin in margins {
+        let actual = @lib.ndvi_threshold_bounds(
+          before, after, threshold, margin,
+        )
+        assert_eq(Json(actual.net), Json(sweep.rows[i].net))
+        assert_eq(
+          actual.neutralization.minimum_changed_pairs is Some(1),
+          feasible[i],
+        )
+        let witness = @lib.ndvi_neutralization_witness(
+          before, after, threshold, margin,
+        )
+        assert_eq(witness is Some(_), feasible[i])
+        if witness is Some(cells) {
+          assert_true(
+            @lib.verify_ndvi_witness(before, after, threshold, margin, cells)
+            is Ok(_),
+          )
+        }
+      }
+    }
+  }
+}
