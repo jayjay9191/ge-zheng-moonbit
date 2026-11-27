@@ -8,7 +8,7 @@ import rasterio
 from rasterio.transform import from_origin
 
 
-def export(source: Path, output: Path) -> tuple[Path, ...]:
+def export(source: Path, output: Path, *, float64: bool = False) -> tuple[Path, ...]:
     grid = json.loads(source.read_bytes())
     shape = grid["height"], grid["width"]
     if grid["cell"] != 30 or min(shape) <= 0:
@@ -42,7 +42,7 @@ def export(source: Path, output: Path) -> tuple[Path, ...]:
                 raise ValueError("Classification disagrees with NDVI difference and threshold")
         classes = np.asarray(codes, dtype="int16").reshape(shape)
         delta = np.asarray([excluded if v is None else v for v in values],
-                           dtype="float32").reshape(shape)
+                           dtype="float64" if float64 else "float32").reshape(shape)
         classes[classes == -2] = excluded
         layers = [("ndvi-class.tif", classes, "classification"), ("ndvi-delta.tif", delta, "NDVI delta")]
     output.mkdir(parents=True, exist_ok=True)
@@ -65,6 +65,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("audit_json", type=Path)
     parser.add_argument("output_directory", type=Path)
+    parser.add_argument("--float64", action="store_true",
+                        help="preserve Double differences for threshold replay with GDAL")
     args = parser.parse_args()
-    for path in export(args.audit_json, args.output_directory):
+    for path in export(args.audit_json, args.output_directory, float64=args.float64):
         print(path)

@@ -5,6 +5,7 @@ import json
 import math
 from pathlib import Path
 from random import Random
+from struct import pack, unpack
 import subprocess
 from tempfile import TemporaryDirectory
 from source_manifest import load_pair
@@ -74,13 +75,11 @@ def verify_geotiff(actual, a, b, xs, ys, codes):
             assert raster.tags()["before"] == a["scene"] and raster.tags()["after"] == b["scene"]
 
 
-def verify_class_geotiff():
+def verify_class_geotiff(folder):
     import rasterio
     from export_geotiff import export
 
-    paths, (a, b) = load_pair(ROOT, ROOT / "data/nanjing/sources.json")
-    cut = Fraction(3, 20)
-    actual = run(*paths, float(cut))
+    paths, (a, b) = load_pair(ROOT, ROOT / folder / "sources.json")
     dx = (b["x"] - a["x"]) // 30
     dy = (a["y"] - b["y"]) // 30
     xs = range(max(0, dx), min(a["width"], dx + b["width"]))
@@ -90,7 +89,14 @@ def verify_class_geotiff():
         for col in xs:
             before = ndvi(a, row * a["width"] + col, True)
             after = ndvi(b, (row - dy) * b["width"] + col - dx, True)
-            expected.append(None if before is None or after is None else after - before)
+            expected.append(None if before is None or after is None else float(after - before))
+
+    # An archived pixel at the exact cutoff loses that classification after
+    # narrowing if Float32 rounds its magnitude toward zero.
+    sample = next(i for i, delta in enumerate(expected)
+                  if delta is not None and abs(unpack("f", pack("f", delta))[0]) < abs(delta))
+    cut = abs(expected[sample])
+    actual = run(*paths, cut)
     classes = [-32768 if delta is None else int(delta >= cut) - int(delta <= -cut)
                for delta in expected]
     masks = [0 if delta is None else 255 for delta in expected]
@@ -112,11 +118,38 @@ def verify_class_geotiff():
                 if path == class_path:
                     assert samples == classes
                 else:
+                    assert raster.dtypes == ("float32",)
                     for stored, delta in zip(samples, expected, strict=True):
                         if delta is None:
                             assert stored == -32768
                         else:
-                            assert abs(stored - float(delta)) < 1e-7
+                            assert abs(stored - delta) < 1e-7
+                    assert abs(samples[sample]) < cut and classes[sample] in (-1, 1)
+        float32_size = delta_path.stat().st_size
+
+        exact_class, exact_delta = export(source, directory / "exact", float64=True)
+        with rasterio.open(exact_class) as labels, rasterio.open(exact_delta) as precise:
+            values = precise.read(1).ravel().tolist()
+            assert values[sample] == expected[sample], (folder, sample, cut, values[sample])
+            assert precise.dtypes == ("float64",)
+            assert precise.crs.to_epsg() == a["epsg"]
+            assert precise.shape == (len(ys), len(xs))
+            assert tuple(precise.transform)[:6] == (30, 0, a["x"] + 30 * xs.start,
+                                                    0, -30, a["y"] - 30 * ys.start)
+            assert precise.nodata == -32768
+            assert precise.read_masks(1).ravel().tolist() == masks
+            stored_cut = float(precise.tags()["threshold"])
+            assert stored_cut == cut
+            assert values == [-32768 if delta is None else delta for delta in expected]
+            recovered = [-32768 if not mask else int(delta >= stored_cut) - int(delta <= -stored_cut)
+                         for delta, mask in zip(values, masks, strict=True)]
+            assert labels.read(1).ravel().tolist() == recovered == classes
+        exact_size = exact_delta.stat().st_size
+        row, col = divmod(sample, len(xs))
+        print(f"PASS {folder} Float64 cutoff {cut!r}, row={row + 1} col={col + 1}: "
+              f"{len(expected)} exact GDAL pixels, Float32/Float64 bytes {float32_size}/{exact_size}")
+        if folder != "data/nanjing":
+            return
 
         # Both sample values round to Float32 0.5, but only the exact
         # threshold belongs to the gain class in the original JSON.
@@ -144,7 +177,6 @@ def verify_class_geotiff():
                 assert not destination.exists()
             else:
                 raise AssertionError((band, invalid))
-    print(f"PASS {len(expected)} Nanjing class and delta pixels match the reference after GDAL readback")
 
 
 def verify_sweep(paths, a, b, screen, offsets, flags):
@@ -290,7 +322,8 @@ def main():
                 else:
                     axial_valid = valid
     if args.geotiff:
-        verify_class_geotiff()
+        for folder in folders:
+            verify_class_geotiff(folder)
     if args.quick:
         return
     verify_cropped_pairs(args)

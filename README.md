@@ -404,7 +404,9 @@ CLI 可用 `--min-coverage 0.70` 设门槛。肥东样例的共同有效覆盖�
 
 ### 导入 GIS 软件
 
-使用已安装 requirements-fetch.txt 的 Python，运行 `python scripts/export_geotiff.py results/feidong/screened.json results/feidong/gis`。两张 GeoTIFF 保留共同网格坐标，排除像元写 NoData。分类为 -1 下降、0 阈值内、1 上升，另一张以 Float32 保存 NDVI 差值。导出前先用 JSON 原精度核对差值、阈值和分类是否一致，同时拒绝异常分类码、非有限差值和两层掩膜不一致。完整脚本通过 GDAL 回读南京真实裁片的分类与差值，并逐像元和独立计算对照。
+使用已安装 requirements-fetch.txt 的 Python，运行 `python scripts/export_geotiff.py results/feidong/screened.json results/feidong/gis`。两张 GeoTIFF 保留共同网格坐标，排除像元写 NoData。分类层以原始阈值计算，为权威结果。码值 -1 表示下降，0 表示阈值内，1 表示上升。导出前核对差值、阈值、分类与 NoData 掩膜的一致性。
+
+默认的 Float32 差值层适用于现有 ArcGIS 流程，临界值会受到舍入影响。用 GDAL 从差值层独立复算阈值时，在导出命令末尾加 `--float64`，可保留原始 Double 差值和阈值元数据。完整验收脚本在三地真实裁片各选一个恰好等于阈值且受 Float32 舍入影响的像元，用 Float64 逐像元回读并复算分类。[GDAL GeoTIFF 数据类型](https://gdal.org/en/stable/drivers/raster/gtiff.html)
 
 ### 分析本地 Landsat 裁片
 
