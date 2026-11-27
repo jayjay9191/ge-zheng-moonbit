@@ -1,5 +1,13 @@
 # 更新记录
 
+## 0.3.1
+
+- 用同一 Double 距离核对 NDVI 裕量、预算临界值和见证，补充肥东 276 对临界见证及相邻阈值回归。
+- 可用 GeoTIFF 导出的 `--float64` 选项复算原分类。三地真实裁片逐像元回读，默认 Float32 保持现有 ArcGIS 流程。
+- 验收 CI 固定 MoonBit `v1.0.0-rc1+3c0520448`，执行检查、构建和测试。
+
+从解包源码目录运行 `python scripts/verify_analysis.py` 复跑临界见证，安装 Rasterio 后运行 `python scripts/verify_shift_stress.py --geotiff` 复核三地导出。
+
 ## 0.3.0（2026-11-25）
 
 - 新增一次扫描的多阈值空间错位曲线，并用三地影像独立复算和 MoonBit 基准核对。

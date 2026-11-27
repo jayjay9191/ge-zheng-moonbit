@@ -21,9 +21,9 @@ python scripts/verify_shift_stress.py --quick
 公开测试用 NDVI 从 0.11 到 0.33 的合成栅格核对 ΔNDVI 恰好为 0.22 的分类，覆盖正反方向、相邻 Double 阈值、逐像元检查和九种取样的错位扫描。可运行 `moon test review --target native`。
 独立验收脚本 `python scripts/verify_analysis.py` 还复算 20×20 合成网格在四档阈值及其相邻 Double 上的 4,800 次分类。
 
-v0.3.0 本期新增对角偏移、面积上下界及一次扫描的多阈值曲线。
+v0.3.0 增加了对角偏移、面积上下界及一次扫描的多阈值曲线。
 去掉 `--quick` 可核对三地真实裁片，再用独立有理数实现复算 48 对固定种子的合成栅格，每对检查 5 个阈值，覆盖双向错位、云雪和饱和掩膜。安装 Rasterio 后加 `--geotiff` 回读栅格。
-[发布记录](https://github.com/jayjay9191/ge-zheng-moonbit/releases/tag/v0.3.0) · [栅格验证](https://github.com/jayjay9191/ge-zheng-moonbit/actions/workflows/verify.yml) · [裁片来源](data/nanjing/sources.json) · [许可证](LICENSE)
+[v0.3.0 发布记录](https://github.com/jayjay9191/ge-zheng-moonbit/releases/tag/v0.3.0) · [栅格验证](https://github.com/jayjay9191/ge-zheng-moonbit/actions/workflows/verify.yml) · [裁片来源](data/nanjing/sources.json) · [许可证](LICENSE)
 
 ## 安装与复跑
 
@@ -32,10 +32,12 @@ v0.3.0 本期新增对角偏移、面积上下界及一次扫描的多阈值曲�
 在现有 MoonBit 工程中添加发布包。公开 API 见 [Mooncakes](https://mooncakes.io/docs/jayjay9191/ge-zheng-moonbit)。
 
 ```sh
-moon add jayjay9191/ge-zheng-moonbit@0.3.0
+moon add jayjay9191/ge-zheng-moonbit@0.3.1
 ```
 
-在源码仓库根目录运行以下命令，分别检查双样区结果和外部接口。Node.js 与 Python 版本见[从新检出复跑](#从新检出复跑)。
+v0.3.1 统一 NDVI 临界裕量和见证的距离口径，支持 Float64 GeoTIFF 精度复跑，并固定 MoonBit 1.0 RC1 的 CI 构建。
+
+在源码仓库或解包后的发行源码目录运行以下命令，分别检查双样区结果和外部接口。Node.js 与 Python 版本见[从新检出复跑](#从新检出复跑)。
 
 ```sh
 moon run cmd/main -- data/scene-1.json data/scene-2.json 0.15 --summary
