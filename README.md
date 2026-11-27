@@ -5,7 +5,7 @@
 
 ## 十一月验收复跑
 
-从源码仓库根目录运行，使用 MoonBit CLI、Node.js 24 和 Python 3.10+。
+从源码仓库根目录运行，使用 `moonc v1.0.0-rc1` 或更新版、Node.js 24 和 Python 3.10+。
 
 ```sh
 python scripts/verify_shift_stress.py --quick
@@ -26,6 +26,8 @@ v0.3.0 本期新增对角偏移、面积上下界及一次扫描的多阈值曲�
 [发布记录](https://github.com/jayjay9191/ge-zheng-moonbit/releases/tag/v0.3.0) · [栅格验证](https://github.com/jayjay9191/ge-zheng-moonbit/actions/workflows/verify.yml) · [裁片来源](data/nanjing/sources.json) · [许可证](LICENSE)
 
 ## 安装与复跑
+
+按 MoonBit 官方安装说明安装工具链，运行 `moonc -v` 确认编译器版本。仓库 CI 固定使用 `v1.0.0-rc1+3c0520448`，并运行 `moon check`、`moon build` 和 `moon test`。[官方安装说明](https://www.moonbitlang.com/download)
 
 在现有 MoonBit 工程中添加发布包。公开 API 见 [Mooncakes](https://mooncakes.io/docs/jayjay9191/ge-zheng-moonbit)。
 
@@ -368,7 +370,13 @@ node gezheng.js data/scene-1.json data/scene-2.json 0.15
 
 ## 从新检出复跑
 
-安装 MoonBit CLI、Node.js 22.3+ 和 Python 3.10+。在仓库根目录运行 `python scripts/verify_local.py`。入口自动跑 MoonBit 测试、从源码构建 JS、核对肥东覆盖门槛和像元证据，再复算两地案例并重建两个离线报告。验收不需要联网或安装第三方 Python 包。已有 `gezheng.js` 的验收包可以直接用试跑.cmd。
+安装 `moonc v1.0.0-rc1` 或更新版、Node.js 22.3+ 和 Python 3.10+。在仓库根目录运行 `python scripts/verify_local.py`。入口自动跑 MoonBit 测试、从源码构建 JS、核对肥东覆盖门槛和像元证据，再复算两地案例并重建两个离线报告。验收不需要联网或安装第三方 Python 包。已有 `gezheng.js` 的验收包可以直接用试跑.cmd。
+
+## 许可与数据来源
+
+项目代码采用 Apache-2.0。核心库使用 MoonBit 标准库。取数和 GeoTIFF 脚本使用 Rasterio、NumPy 与 Requests，依赖在运行环境中安装。[项目许可证](LICENSE) · [MoonBit 标准库许可证](https://github.com/moonbitlang/core/blob/main/LICENSE) · [Rasterio 许可证](https://github.com/rasterio/rasterio/blob/main/LICENSE.txt) · [NumPy 许可证](https://numpy.org/doc/stable/license.html) · [Requests 许可证](https://github.com/psf/requests/blob/main/LICENSE)
+
+Landsat 影像由 USGS 提供。巢湖、肥东和南京的清单记录了场景标识、原始资产、裁片窗口和 SHA-256。[巢湖](data/sources.json) · [肥东](data/feidong/sources.json) · [南京](data/nanjing/sources.json) · [USGS 数据使用与引用说明](https://www.usgs.gov/centers/eros/data-citation)
 
 ## 实现与验证
 
